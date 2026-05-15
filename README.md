@@ -114,6 +114,8 @@ Fragments under 3 words (e.g. "um", "yeah") are never speculated on — avoids w
 
 **Barge-in:** when the bot is mid-sentence, the first Deepgram partial that reaches `BARGE_IN_PARTIAL_CHARS` characters calls `sounddevice.stop()` and the TTS state flips to `barged`. The user's subsequent `is_final` enters the normal Crosstalk path and starts a fresh turn. Raise the threshold to suppress short noises (cough, "uh"); lower it for more aggressive barge.
 
+**Echo guard:** without an AEC step, the bot's own audio bleeds back through the mic and Deepgram transcribes it — which would make the bot barge in on itself (and even reply to itself). Before treating a partial or final as user speech during TTS, we normalize it (lowercase, strip punctuation) and compare against the bot's current outgoing text. If 60%+ of the partial's words appear in the bot text, it's classified as echo and ignored. The guard stays armed for 600ms after `sd.play()` returns to absorb the tail.
+
 Implementation: `scripts/conduit_tui/crosstalk.py` (coordinator) + `scripts/conduit_tui/orchestrator.py` (wiring).
 Reference: https://github.com/tarzain/crosstalk (commit 327b2da).
 

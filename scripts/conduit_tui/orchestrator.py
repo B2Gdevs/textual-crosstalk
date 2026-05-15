@@ -38,6 +38,17 @@ from .mic_capture import MicStream
 from .tts_client import ElevenLabsClient
 
 
+_ECHO_STRIP = str.maketrans("", "", ".,!?;:\"'()[]{}—-")
+
+
+def _normalize_for_echo(text: str) -> str:
+    """Lowercase + strip punctuation, collapse whitespace. Used to compare
+    a Deepgram partial against the bot's outgoing TTS text without being
+    tripped up by capitalization or punctuation."""
+    cleaned = text.translate(_ECHO_STRIP).lower()
+    return " ".join(cleaned.split())
+
+
 @dataclass
 class TurnResult:
     user_text: str
@@ -94,6 +105,9 @@ class ConversationLoop:
         # Barge-in state
         self._tts_playing = False
         self._barge_in_chars = int(os.environ.get("BARGE_IN_PARTIAL_CHARS", "3"))
+        # What the bot is currently saying — used to reject echo of bot
+        # audio so we don't barge-in on ourselves.
+        self._current_bot_text_norm: str = ""
 
         # Crosstalk coordinator — replaces dumb 1.5s silence wait
         self._crosstalk = Crosstalk(
@@ -166,9 +180,39 @@ class ConversationLoop:
             self._on_status("stt", "live")
 
         # Barge-in: if bot is currently speaking and the user's partial
-        # has crossed the threshold, cut the playback immediately.
+        # has crossed the threshold, cut the playback immediately —
+        # unless the partial looks like the bot's own audio echoing back
+        # through the mic (self-interruption).
         if self._tts_playing and len(text.strip()) >= self._barge_in_chars:
+            if self._is_bot_echo(text):
+                return
             self._barge_in()
+
+    def _is_bot_echo(self, partial: str) -> bool:
+        """True if the Deepgram partial looks like the bot's own audio
+        bleeding back through the mic. We compare normalized partial
+        against the bot's outgoing text — if every word in the partial
+        appears in the bot text (in order or as a substring), it's echo.
+        """
+        bot = self._current_bot_text_norm
+        if not bot:
+            return False
+        norm = _normalize_for_echo(partial)
+        if not norm:
+            return False
+        # Short partials: substring match is enough.
+        if norm in bot:
+            return True
+        # Longer partials: check that most words appear in the bot text.
+        words = norm.split()
+        if not words:
+            return False
+        hits = sum(1 for w in words if w in bot)
+        return hits / len(words) >= 0.6
+
+    async def _clear_echo_guard_after(self, delay_s: float) -> None:
+        await asyncio.sleep(delay_s)
+        self._current_bot_text_norm = ""
 
     def _barge_in(self) -> None:
         """Cut in-flight TTS playback. Called from partial handler."""
@@ -209,6 +253,14 @@ class ConversationLoop:
             words_in_batch.append("".join(current_chars))
 
         if not words_in_batch:
+            return
+
+        # Echo filter: if the bot is still speaking (or just finished) and
+        # this final matches what the bot is saying, drop it. Otherwise the
+        # bot's audio bleeding into the mic kicks off a Crosstalk cycle
+        # that makes the bot reply to itself.
+        echo_candidate = " ".join(words_in_batch)
+        if self._current_bot_text_norm and self._is_bot_echo(echo_candidate):
             return
 
         for w in words_in_batch:
@@ -271,11 +323,16 @@ class ConversationLoop:
             if self._on_status:
                 self._on_status("tts", "playing")
 
+            self._current_bot_text_norm = _normalize_for_echo(bot_text)
             self._tts_playing = True
             try:
                 await self._tts.play_audio(audio_bytes)
             finally:
                 self._tts_playing = False
+                # Hold the bot-text echo guard for a short tail so any
+                # lingering Deepgram partials arriving after sd.play()
+                # returns still get filtered as echo, not barge-in.
+                asyncio.create_task(self._clear_echo_guard_after(0.6))
 
             if self._on_status:
                 self._on_status("tts", "idle")
@@ -283,5 +340,6 @@ class ConversationLoop:
         except Exception as exc:
             print(f"[orchestrator] TTS error: {exc}")
             self._tts_playing = False
+            self._current_bot_text_norm = ""
             if self._on_status:
                 self._on_status("tts", "error")
