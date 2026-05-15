@@ -7,6 +7,11 @@ Turn flow (Part 2 — Crosstalk):
   3. If user keeps talking, in-flight LLM task is cancelled (asyncio.Task.cancel)
   4. When SETTLED_THRESHOLD_MS passes with no new words, response commits → TTS
 
+Barge-in: if a Deepgram partial arrives while TTS is playing AND the
+partial has at least BARGE_IN_PARTIAL_CHARS characters, the in-flight
+TTS playback is cut via sounddevice.stop(). The user's next is_final
+will start a fresh turn through Crosstalk normally.
+
 All char entries (user STT + bot TTS) go to JsonlStore.
 UI callbacks update StatusBar + transcript logs.
 
@@ -14,10 +19,12 @@ Env vars:
   CROSSTALK_SPECULATIVE_THRESHOLD_MS  (default 250)
   CROSSTALK_SETTLED_THRESHOLD_MS      (default 600)
   CROSSTALK_MIN_WORDS                 (default 3)
+  BARGE_IN_PARTIAL_CHARS              (default 3 — min partial length to cut TTS)
 """
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -83,6 +90,10 @@ class ConversationLoop:
 
         # Turn accumulation (fed to Crosstalk)
         self._pending_finals: list[str] = []
+
+        # Barge-in state
+        self._tts_playing = False
+        self._barge_in_chars = int(os.environ.get("BARGE_IN_PARTIAL_CHARS", "3"))
 
         # Crosstalk coordinator — replaces dumb 1.5s silence wait
         self._crosstalk = Crosstalk(
@@ -153,6 +164,22 @@ class ConversationLoop:
             self._on_user_partial(text)
         if self._on_status:
             self._on_status("stt", "live")
+
+        # Barge-in: if bot is currently speaking and the user's partial
+        # has crossed the threshold, cut the playback immediately.
+        if self._tts_playing and len(text.strip()) >= self._barge_in_chars:
+            self._barge_in()
+
+    def _barge_in(self) -> None:
+        """Cut in-flight TTS playback. Called from partial handler."""
+        try:
+            import sounddevice as sd
+            sd.stop()
+        except Exception as exc:
+            print(f"[orchestrator] barge-in stop error: {exc}")
+        self._tts_playing = False
+        if self._on_status:
+            self._on_status("tts", "barged")
 
     async def _store_and_emit_chars(self, chars: list[CharEntry]) -> None:
         for ch in chars:
@@ -244,12 +271,17 @@ class ConversationLoop:
             if self._on_status:
                 self._on_status("tts", "playing")
 
-            await self._tts.play_audio(audio_bytes)
+            self._tts_playing = True
+            try:
+                await self._tts.play_audio(audio_bytes)
+            finally:
+                self._tts_playing = False
 
             if self._on_status:
                 self._on_status("tts", "idle")
 
         except Exception as exc:
             print(f"[orchestrator] TTS error: {exc}")
+            self._tts_playing = False
             if self._on_status:
                 self._on_status("tts", "error")

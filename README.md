@@ -108,8 +108,11 @@ Speculative LLM firing + cancellation — eliminates the fixed 1.5s silence-wait
 | `CROSSTALK_SPECULATIVE_THRESHOLD_MS` | `250` | ms silence before speculative LLM start |
 | `CROSSTALK_SETTLED_THRESHOLD_MS` | `600` | ms silence before committing to TTS |
 | `CROSSTALK_MIN_WORDS` | `3` | minimum words to trigger speculation |
+| `BARGE_IN_PARTIAL_CHARS` | `3` | min chars in a Deepgram partial that cuts in-flight TTS |
 
 Fragments under 3 words (e.g. "um", "yeah") are never speculated on — avoids wasted LLM calls on filler.
+
+**Barge-in:** when the bot is mid-sentence, the first Deepgram partial that reaches `BARGE_IN_PARTIAL_CHARS` characters calls `sounddevice.stop()` and the TTS state flips to `barged`. The user's subsequent `is_final` enters the normal Crosstalk path and starts a fresh turn. Raise the threshold to suppress short noises (cough, "uh"); lower it for more aggressive barge.
 
 Implementation: `scripts/conduit_tui/crosstalk.py` (coordinator) + `scripts/conduit_tui/orchestrator.py` (wiring).
 Reference: https://github.com/tarzain/crosstalk (commit 327b2da).
