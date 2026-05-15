@@ -189,10 +189,13 @@ class ConversationLoop:
             self._barge_in()
 
     def _is_bot_echo(self, partial: str) -> bool:
-        """True if the Deepgram partial looks like the bot's own audio
-        bleeding back through the mic. We compare normalized partial
-        against the bot's outgoing text — if every word in the partial
-        appears in the bot text (in order or as a substring), it's echo.
+        """True if every word in the partial also appears in the bot's
+        current outgoing text. The presence of even ONE word the bot
+        isn't saying counts as real user speech — the human should
+        always be able to interrupt with "stop", "wait", "hold on", etc.
+        Conservative on purpose: false negatives (echo not filtered) just
+        cause a brief self-cut of TTS; false positives (real user
+        speech misclassified) would silently swallow the user's barge.
         """
         bot = self._current_bot_text_norm
         if not bot:
@@ -200,15 +203,13 @@ class ConversationLoop:
         norm = _normalize_for_echo(partial)
         if not norm:
             return False
-        # Short partials: substring match is enough.
-        if norm in bot:
-            return True
-        # Longer partials: check that most words appear in the bot text.
-        words = norm.split()
-        if not words:
+        bot_words = set(bot.split())
+        partial_words = norm.split()
+        if not partial_words:
             return False
-        hits = sum(1 for w in words if w in bot)
-        return hits / len(words) >= 0.6
+        # If any word in the partial does NOT appear in the bot's text,
+        # it's a real user utterance — not echo. Let barge-in fire.
+        return all(w in bot_words for w in partial_words)
 
     async def _clear_echo_guard_after(self, delay_s: float) -> None:
         await asyncio.sleep(delay_s)
@@ -329,10 +330,11 @@ class ConversationLoop:
                 await self._tts.play_audio(audio_bytes)
             finally:
                 self._tts_playing = False
-                # Hold the bot-text echo guard for a short tail so any
-                # lingering Deepgram partials arriving after sd.play()
-                # returns still get filtered as echo, not barge-in.
-                asyncio.create_task(self._clear_echo_guard_after(0.6))
+                # Hold the bot-text echo guard for a brief tail so a
+                # final that lands right after sd.play() returns still
+                # gets filtered out of Crosstalk. Kept short so the next
+                # legitimate user turn isn't suppressed.
+                asyncio.create_task(self._clear_echo_guard_after(0.25))
 
             if self._on_status:
                 self._on_status("tts", "idle")
