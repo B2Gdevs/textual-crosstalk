@@ -1,0 +1,29 @@
+{
+  "id": "04-10",
+  "phase": "04",
+  "status": "done",
+  "goal": "Fix the state-machine bug that swallowed user continuation after barge. The TTS finally-branch unconditionally reset _finals_gate_until to monotonic+POST_TTS_COOLDOWN_S — overriding the open gate the barge had just set. Now only resets if the gate is still in the future (i.e. natural TTS end), preserving the barge-open state. Also loosen _is_bot_echo: require >= 2 words for echo suppression so 1-word user barges ('stop', 'yes', 'no', 'wait') are never silently dropped even if they appear in bot text.",
+  "type": "code",
+  "keywords": "",
+  "depends": [
+    "04-09"
+  ],
+  "commands": [],
+  "files": [
+    "scripts/conduit_tui/orchestrator.py"
+  ],
+  "agent_id": "claude-opus-4-7",
+  "agent_role": "",
+  "runtime": "claude-code",
+  "model_profile": "",
+  "resolved_model": "",
+  "skill": "",
+  "claimed_by": "",
+  "claimed": false,
+  "claimed_at": "",
+  "lease_expires_at": "",
+  "completed_at": "",
+  "resolution": "",
+  "created_at": "2026-05-15T21:16:56.797Z",
+  "updated_at": "2026-05-15T21:16:58.033Z"
+}

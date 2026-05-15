@@ -226,13 +226,20 @@ class ConversationLoop:
             self._barge_in()
 
     def _is_bot_echo(self, partial: str) -> bool:
-        """True if every word in the partial also appears in the bot's
-        current outgoing text. The presence of even ONE word the bot
-        isn't saying counts as real user speech — the human should
-        always be able to interrupt with "stop", "wait", "hold on", etc.
-        Conservative on purpose: false negatives (echo not filtered) just
-        cause a brief self-cut of TTS; false positives (real user
-        speech misclassified) would silently swallow the user's barge.
+        """True if the partial looks like residual bot audio bleeding
+        through the AEC, not real user speech. With AEC working we
+        expect this to be rare — kept as a backstop.
+
+        Heuristics:
+          1. Partial must have at least 2 words. Single-word partials
+             ("yes", "no", "stop", "wait") are too ambiguous — the bot
+             likely uses some of those words too, but the user
+             ABSOLUTELY needs to be able to interrupt with them.
+          2. Every word must also appear in the bot's outgoing text.
+
+        Bias is toward false negatives (echo slips through and briefly
+        self-cuts TTS) over false positives (silently swallowing the
+        user's barge).
         """
         bot = self._current_bot_text_norm
         if not bot:
@@ -240,12 +247,10 @@ class ConversationLoop:
         norm = _normalize_for_echo(partial)
         if not norm:
             return False
-        bot_words = set(bot.split())
         partial_words = norm.split()
-        if not partial_words:
+        if len(partial_words) < 2:
             return False
-        # If any word in the partial does NOT appear in the bot's text,
-        # it's a real user utterance — not echo. Let barge-in fire.
+        bot_words = set(bot.split())
         return all(w in bot_words for w in partial_words)
 
     async def _clear_echo_guard_after(self, delay_s: float) -> None:
@@ -395,16 +400,19 @@ class ConversationLoop:
                 # Drain AEC. Any residual reference samples that mic_pump
                 # didn't consume (rate slop at TTS edges) would otherwise
                 # be cancelled against pure user speech on the next turn
-                # and silence the user. The AEC also drops sub-frame
-                # residuals on its own, but explicit clear here is the
-                # cheapest belt + suspenders.
+                # and silence the user.
                 self._aec.clear_reference()
-                # Cooldown after natural TTS end — the speaker may still
-                # be sending echo for ~hundreds of ms after sd.play()
-                # returns. A barge would have already opened the gate.
-                self._finals_gate_until = (
-                    time.monotonic() + self._post_tts_cooldown_s
-                )
+                # Only apply the post-TTS cooldown if the gate is still
+                # in the future — i.e. TTS ended naturally. If barge
+                # already opened the gate (set _finals_gate_until to a
+                # past timestamp), do not re-close it: the user's
+                # continuation needs to flow into Crosstalk immediately.
+                # This was the root cause of "can't interrupt and
+                # continue" — the finally branch was overwriting the
+                # barge-opened gate with a fresh 0.6s cooldown.
+                now = time.monotonic()
+                if self._finals_gate_until > now:
+                    self._finals_gate_until = now + self._post_tts_cooldown_s
                 asyncio.create_task(self._clear_echo_guard_after(0.25))
 
             if self._on_status:

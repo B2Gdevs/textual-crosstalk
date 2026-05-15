@@ -43,4 +43,12 @@
     <reference>scripts/conduit_tui/aec.py</reference>
     <reference>scripts/conduit_tui/orchestrator.py</reference>
   </entry>
+
+  <entry id="post-barge-cooldown-reclosed-gate-2026-05-15" date="2026-05-15" phase="04" status="resolved" kind="code">
+    <summary>After barge, the TTS finally-branch silently re-closed the finals gate for POST_TTS_COOLDOWN_S, swallowing the user's continuation</summary>
+    <context>User: 'i cant interrupt it still. i just tried it. it should weight my voice different than its own.' Investigation pivoted from speaker-recognition (the obvious next step) to re-reading the barge state machine first.</context>
+    <failure>_barge_in() correctly set _finals_gate_until = time.monotonic() — i.e. gate OPEN. sd.stop() then made the awaiting play_audio() return immediately. The try/finally around play_audio ran its finally branch, which unconditionally set _finals_gate_until = monotonic + POST_TTS_COOLDOWN_S (0.6s). Result: for 600ms right after a barge, every is_final from the user's continuation was dropped at _store_and_emit_chars before reaching Crosstalk. User appeared unable to interrupt — but they were interrupting; their words just never reached the LLM. Second issue: _is_bot_echo classified ANY partial whose words all appear in bot text as echo, including 1-word user barges like 'stop' or 'yes' which a long bot reply naturally contains.</failure>
+    <rule>State machine fixes: when one path opens a gate, every other path that touches the same gate must check whether the open is still valid before re-closing. Pattern: 'only close if currently in the future'. For text-similarity classifiers used to gate intentional user actions, require a minimum length (&gt;= 2 words) — short matches are too ambiguous to silently suppress.</rule>
+    <reference>scripts/conduit_tui/orchestrator.py</reference>
+  </entry>
 </errors-and-attempts>
