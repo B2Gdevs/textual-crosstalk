@@ -34,6 +34,7 @@ from .orchestrator import ConversationLoop
 from .scenarios import next_scenario
 from .status import StatusBar
 from .tts_client import ElevenLabsClient
+from .vosk_client import VoskStream
 
 
 _MAX_TABLE_ROWS = 20
@@ -120,8 +121,19 @@ class ConversationScreen(Screen):
         primary_voice_id = scenario.bot_voices[0][0] if scenario.bot_voices else None
         self._announce_scenario(scenario)
 
+        # CONDUIT_STT selects the STT backend:
+        #   "deepgram" (default) — cloud Deepgram, requires DEEPGRAM_API_KEY
+        #   "vosk"               — local Vosk small EN model, no API key
+        # Both backends expose the same surface (connect/send/finish +
+        # _on_chars/_on_partial), so the orchestrator wiring is identical.
+        stt_backend = os.environ.get("CONDUIT_STT", "deepgram").strip().lower()
+
         try:
-            dg_key = os.environ["DEEPGRAM_API_KEY"]
+            dg_key = (
+                os.environ["DEEPGRAM_API_KEY"]
+                if stt_backend == "deepgram"
+                else os.environ.get("DEEPGRAM_API_KEY", "")
+            )
             or_key = os.environ.get("OPENROUTER_API_KEY")
             or_model = os.environ.get("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct")
             groq_key = os.environ.get("GROQ_API_KEY")
@@ -146,14 +158,26 @@ class ConversationScreen(Screen):
         store = JsonlStore(char_log)
 
         try:
-            dg_stream = DeepgramStream(
-                api_key=dg_key,
-                sample_rate=sample_rate,
-                session_start=self._session_start,
-            )
+            if stt_backend == "vosk":
+                dg_stream = VoskStream(
+                    sample_rate=sample_rate,
+                    session_start=self._session_start,
+                )
+            elif stt_backend == "deepgram":
+                dg_stream = DeepgramStream(
+                    api_key=dg_key,
+                    sample_rate=sample_rate,
+                    session_start=self._session_start,
+                )
+            else:
+                self._log_error(
+                    f"Unknown CONDUIT_STT value {stt_backend!r} "
+                    "(expected 'deepgram' or 'vosk')"
+                )
+                return
             await dg_stream.connect()
         except Exception as exc:
-            self._log_error(f"Deepgram connect failed: {exc}")
+            self._log_error(f"{stt_backend} connect failed: {exc}")
             return
 
         try:

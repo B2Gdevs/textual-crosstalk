@@ -32,8 +32,15 @@ and --bot flags if you have one.
 from __future__ import annotations
 
 import argparse
+import asyncio
+import json
 import math
+import os
+import random
+import re
+import string
 import sys
+import time
 import wave
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,10 +48,13 @@ from pathlib import Path
 import numpy as np
 
 from scripts.conduit_tui.aec import make_echo_canceller
-from scripts.conduit_tui.speaker_id import SpeakerClassifier
+from scripts.conduit_tui.speaker_id import SpeakerClassifier, extract_features
 
 
 SR = 16000
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_MANIFEST_PATH = _REPO_ROOT / "data" / "dataset" / "manifest.json"
+_USER_DIR = _REPO_ROOT / "data" / "dataset" / "user"
 
 
 # ----------------------------------------------------------------------
@@ -451,24 +461,467 @@ def benchmark_latency() -> None:
     print("  Anything under ~10ms leaves ample headroom for STT / LLM / TTS network calls.")
 
 
+# ----------------------------------------------------------------------
+# WER + STT eval
+
+
+_PUNCT_RE = re.compile(rf"[{re.escape(string.punctuation)}]")
+
+
+def _normalize_text(s: str) -> list[str]:
+    """Lowercase, strip punctuation, split on whitespace."""
+    s = s.lower()
+    s = _PUNCT_RE.sub(" ", s)
+    return s.split()
+
+
+def _wer(reference: str, hypothesis: str) -> float:
+    """Word-level error rate via Levenshtein distance on tokenized words.
+
+    Returns edit-distance / len(reference). If the reference is empty,
+    returns 0.0 when the hypothesis is also empty, else 1.0.
+    Pure-python; O(N*M) memory.
+    """
+    ref = _normalize_text(reference)
+    hyp = _normalize_text(hypothesis)
+    if not ref:
+        return 0.0 if not hyp else 1.0
+    n, m = len(ref), len(hyp)
+    # Two-row dynamic programming
+    prev = list(range(m + 1))
+    cur = [0] * (m + 1)
+    for i in range(1, n + 1):
+        cur[0] = i
+        for j in range(1, m + 1):
+            cost = 0 if ref[i - 1] == hyp[j - 1] else 1
+            cur[j] = min(
+                prev[j] + 1,        # deletion
+                cur[j - 1] + 1,     # insertion
+                prev[j - 1] + cost  # substitution / match
+            )
+        prev, cur = cur, prev
+    distance = prev[m]
+    return distance / n
+
+
+def _load_manifest() -> list[dict]:
+    if not _MANIFEST_PATH.exists():
+        return []
+    try:
+        with _MANIFEST_PATH.open(encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, list) else []
+    except Exception as exc:
+        print(f"[manifest] failed to load {_MANIFEST_PATH}: {exc}")
+        return []
+
+
+def _try_import_stt(backend: str):
+    """Return a callable stt_factory(api_key) → STT instance, or None.
+
+    The factory returns an object with .connect()/.send(bytes)/.finish()
+    async methods and exposes ._on_chars / ._on_partial callback slots.
+    """
+    backend = backend.lower()
+    if backend == "deepgram":
+        try:
+            from scripts.conduit_tui.deepgram_client import DeepgramStream
+        except Exception as exc:
+            print(f"[stt] deepgram import failed: {exc}")
+            return None
+        api_key = os.environ.get("DEEPGRAM_API_KEY", "").strip()
+        if not api_key or api_key == "0":
+            # Try .env.local
+            env_path = _REPO_ROOT / ".env.local"
+            if env_path.exists():
+                try:
+                    for line in env_path.read_text(encoding="utf-8").splitlines():
+                        if line.startswith("DEEPGRAM_API_KEY="):
+                            api_key = line.split("=", 1)[1].strip().strip('"').strip("'")
+                            break
+                except Exception:
+                    pass
+        if not api_key or api_key == "0":
+            print("[stt] DEEPGRAM_API_KEY not set (or set to '0'); cannot run deepgram benchmark")
+            return None
+
+        def factory():
+            return DeepgramStream(api_key=api_key, sample_rate=SR)
+
+        return factory
+
+    if backend == "vosk":
+        try:
+            from scripts.conduit_tui.vosk_client import VoskStream  # type: ignore
+        except Exception as exc:
+            print(f"[stt] vosk import failed: {exc}")
+            return None
+
+        def factory():
+            return VoskStream(sample_rate=SR)  # type: ignore[name-defined]
+
+        return factory
+
+    return None
+
+
+async def _run_stt_clip(
+    stt_factory,
+    pcm_int16: np.ndarray,
+    ground_truth: str,
+) -> tuple[float, float, float, str]:
+    """Run a single clip through an STT session.
+
+    Returns (wer, latency_first_partial_s, latency_final_s, final_text).
+    Latencies are NaN if no partial / final was observed.
+    """
+    stt = stt_factory()
+    final_text_parts: list[str] = []
+    partial_seen: list[float] = []
+    final_seen: list[float] = []
+    last_partial_text = [""]
+
+    def _on_chars(chars):
+        # DeepgramStream signals "final" via _on_chars (it only emits
+        # chars on is_final). Treat each emission as a final segment.
+        # The CharEntry list lacks explicit space separators — we
+        # reconstruct word boundaries from the `notes` field, which
+        # `interpolate_chars` stamps with "word=<word_text>" per word.
+        try:
+            parts: list[str] = []
+            prev_word = None
+            for c in chars:
+                ch = getattr(c, "char", "") or ""
+                notes = getattr(c, "notes", "") or ""
+                # Extract word=... tag
+                word_tag = None
+                for tok in notes.split(","):
+                    if tok.startswith("word="):
+                        word_tag = tok[5:]
+                        break
+                if prev_word is not None and word_tag != prev_word:
+                    parts.append(" ")
+                parts.append(ch)
+                prev_word = word_tag
+            text = "".join(parts).strip()
+        except Exception:
+            text = ""
+        if text:
+            final_text_parts.append(text)
+            final_seen.append(time.perf_counter())
+
+    def _on_partial(text: str):
+        partial_seen.append(time.perf_counter())
+        last_partial_text[0] = text or ""
+
+    # Attach callbacks (works for DeepgramStream — both attrs exist post-init)
+    try:
+        stt._on_chars = _on_chars  # type: ignore[attr-defined]
+        stt._on_partial = _on_partial  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+    await stt.connect()
+
+    start = time.perf_counter()
+    chunk_samples = 1024
+    bytes_per_sample = 2
+    # Real-time simulation: 1024 samples @ 16 kHz = 64 ms
+    chunk_dur = chunk_samples / SR
+    pcm_bytes = pcm_int16.astype(np.int16).tobytes()
+    for off in range(0, len(pcm_bytes), chunk_samples * bytes_per_sample):
+        chunk = pcm_bytes[off : off + chunk_samples * bytes_per_sample]
+        await stt.send(chunk)
+        # Small sleep to approximate real-time. Use a fraction of the
+        # nominal chunk duration so the test runs faster than wall-clock.
+        await asyncio.sleep(chunk_dur * 0.25)
+
+    # Drain — give the server a moment to flush final results.
+    # Deepgram's utterance_end_ms is 1500ms; we need to wait at least
+    # that long after the last send for the final to land.
+    await asyncio.sleep(2.0)
+    await stt.finish()
+    # Extra wait for any trailing final to land via the listen task
+    await asyncio.sleep(0.3)
+
+    lat_partial = (partial_seen[0] - start) if partial_seen else float("nan")
+    lat_final = (final_seen[-1] - start) if final_seen else float("nan")
+
+    final_text = " ".join(final_text_parts).strip()
+    if not final_text:
+        # Fall back to the last partial if no final ever arrived
+        final_text = last_partial_text[0]
+
+    wer = _wer(ground_truth, final_text)
+    return wer, lat_partial, lat_final, final_text
+
+
+def benchmark_stt(stt_factory, n_samples: int = 20, backend_label: str = "stt") -> None:
+    print(f"\n=== STT Benchmark ({backend_label}) ===")
+    manifest = _load_manifest()
+    if not manifest:
+        print("[skip] no manifest at data/dataset/manifest.json")
+        return
+    rng = random.Random(42)
+    sample = rng.sample(manifest, min(n_samples, len(manifest)))
+    print(f"sampling {len(sample)} of {len(manifest)} manifest clips")
+
+    wers: list[float] = []
+    lat_partials: list[float] = []
+    lat_finals: list[float] = []
+    failures = 0
+
+    for i, entry in enumerate(sample):
+        wav_rel = entry.get("wav_path", "")
+        phrase = entry.get("phrase", "")
+        wav_path = _REPO_ROOT / wav_rel if wav_rel else None
+        if not wav_path or not wav_path.exists():
+            failures += 1
+            continue
+        try:
+            pcm = _load_wav_int16(wav_path)
+        except Exception as exc:
+            print(f"  [{i+1}/{len(sample)}] load failed: {exc}")
+            failures += 1
+            continue
+        try:
+            wer, lp, lf, hyp = asyncio.run(_run_stt_clip(stt_factory, pcm, phrase))
+        except Exception as exc:
+            print(f"  [{i+1}/{len(sample)}] stt session failed: {exc}")
+            failures += 1
+            continue
+        wers.append(wer)
+        if not math.isnan(lp):
+            lat_partials.append(lp)
+        if not math.isnan(lf):
+            lat_finals.append(lf)
+        print(
+            f"  [{i+1}/{len(sample)}] wer={wer*100:5.1f}%  "
+            f"lat_partial={lp*1000:6.0f}ms  lat_final={lf*1000:6.0f}ms  "
+            f"ref={phrase!r}  hyp={hyp!r}"
+        )
+
+    if not wers:
+        print(f"[stt] no clips scored ({failures} failures); is the backend reachable?")
+        return
+
+    mean_wer = float(np.mean(wers))
+    std_wer = float(np.std(wers))
+    mp = float(np.mean(lat_partials)) if lat_partials else float("nan")
+    mf = float(np.mean(lat_finals)) if lat_finals else float("nan")
+    print(f"\n[stt:{backend_label}] mean WER: {mean_wer*100:.1f}%  std: {std_wer*100:.1f}%  ({len(wers)} clips)")
+    print(f"[stt:{backend_label}] mean latency-to-first-partial: {mp*1000:.0f} ms ({len(lat_partials)} clips)")
+    print(f"[stt:{backend_label}] mean latency-to-final:          {mf*1000:.0f} ms ({len(lat_finals)} clips)")
+    if failures:
+        print(f"[stt:{backend_label}] {failures} clip(s) failed and were excluded")
+
+
+# ----------------------------------------------------------------------
+# Personalized speaker eval
+
+
+def _chunk_signal(pcm: np.ndarray, chunk_samples: int) -> list[np.ndarray]:
+    """Simple non-overlapping slicing into fixed-length chunks."""
+    out: list[np.ndarray] = []
+    for i in range(0, pcm.size - chunk_samples + 1, chunk_samples):
+        out.append(pcm[i : i + chunk_samples])
+    return out
+
+
+def benchmark_speaker_personalized() -> None:
+    """Personalized speaker eval using the operator's session wavs.
+
+    Reflects the actual operator voice + microphone + room, not synthetic
+    formants. Skips cleanly if no operator wavs are present.
+    """
+    print("\n=== Speaker Personalized Benchmark ===")
+    if not _USER_DIR.exists():
+        print(f"[skip] no operator wavs yet at {_USER_DIR.relative_to(_REPO_ROOT)} —")
+        print("       run the TUI a few times to populate (operator audio is")
+        print("       persisted by operator_capture.py on session finalize).")
+        return
+
+    user_wavs = sorted(_USER_DIR.glob("*.wav"))
+    if not user_wavs:
+        print(f"[skip] no operator wavs yet in {_USER_DIR.relative_to(_REPO_ROOT)} —")
+        print("       run the TUI a few times to populate.")
+        return
+
+    print(f"found {len(user_wavs)} operator wav(s)")
+
+    # Use the first wav as enrollment, remainder as test material.
+    enrol_path = user_wavs[0]
+    try:
+        enrol_pcm = _load_wav_int16(enrol_path)
+    except Exception as exc:
+        print(f"[skip] enrollment wav {enrol_path.name} failed to load: {exc}")
+        return
+
+    if enrol_pcm.size < SR:
+        print(f"[skip] enrollment wav {enrol_path.name} too short ({enrol_pcm.size} samples)")
+        return
+
+    enrol_feat = extract_features(enrol_pcm)
+    if enrol_feat is None:
+        print(f"[skip] enrollment feature extraction returned None for {enrol_path.name}")
+        return
+    enrol_norm = _l2_normalize(enrol_feat)
+
+    # Gather all 2-second chunks across all wavs (incl. tail of enrol wav).
+    chunk_samples = 2 * SR
+    user_chunks: list[np.ndarray] = []
+    # From the enrollment wav, skip the first chunk (used for enrolment)
+    enrol_chunks = _chunk_signal(enrol_pcm, chunk_samples)
+    user_chunks.extend(enrol_chunks[1:])
+    for p in user_wavs[1:]:
+        try:
+            pcm = _load_wav_int16(p)
+        except Exception:
+            continue
+        user_chunks.extend(_chunk_signal(pcm, chunk_samples))
+
+    if not user_chunks:
+        print("[skip] not enough user audio for 2s chunks after enrolment")
+        return
+
+    print(f"derived {len(user_chunks)} user test chunk(s) of 2.0s each")
+
+    # Bot pool: random ElevenLabs clips from the manifest.
+    manifest = _load_manifest()
+    if not manifest:
+        print("[skip] no manifest — cannot build user-vs-bot trials")
+        return
+
+    rng = random.Random(123)
+    n_user_pairs = 50
+    n_bot_pairs = 50
+
+    # User-vs-user trials: pair the enrolment template against random user chunks
+    # (with replacement if needed to hit the target count).
+    user_scores: list[float] = []
+    for _ in range(n_user_pairs):
+        chunk = rng.choice(user_chunks)
+        feat = extract_features(chunk)
+        if feat is None:
+            continue
+        sim = float(np.dot(enrol_norm, _l2_normalize(feat)))
+        user_scores.append(sim)
+
+    # User-vs-bot trials
+    bot_scores: list[float] = []
+    bot_pool = list(manifest)
+    rng.shuffle(bot_pool)
+    bot_idx = 0
+    attempts = 0
+    while len(bot_scores) < n_bot_pairs and attempts < n_bot_pairs * 4:
+        attempts += 1
+        entry = bot_pool[bot_idx % len(bot_pool)]
+        bot_idx += 1
+        wav_rel = entry.get("wav_path", "")
+        wav_path = _REPO_ROOT / wav_rel if wav_rel else None
+        if not wav_path or not wav_path.exists():
+            continue
+        try:
+            pcm = _load_wav_int16(wav_path)
+        except Exception:
+            continue
+        if pcm.size < chunk_samples:
+            # Use the whole clip if it's shorter than 2s
+            seg = pcm
+        else:
+            # Random 2-second slice
+            start = rng.randint(0, pcm.size - chunk_samples)
+            seg = pcm[start : start + chunk_samples]
+        feat = extract_features(seg)
+        if feat is None:
+            continue
+        sim = float(np.dot(enrol_norm, _l2_normalize(feat)))
+        bot_scores.append(sim)
+
+    print(f"scored: user-vs-user={len(user_scores)}  user-vs-bot={len(bot_scores)}")
+
+    if not user_scores or not bot_scores:
+        print("[skip] insufficient trial scores")
+        return
+
+    eer = _equal_error_rate(user_scores, [-s for s in bot_scores])
+    print(f"[personalized] EER (user-vs-bot, corpus-level): {eer*100:.1f}%")
+    print(f"  user-vs-user cos sim: mean={np.mean(user_scores):.3f} std={np.std(user_scores):.3f}")
+    print(f"  user-vs-bot  cos sim: mean={np.mean(bot_scores):.3f} std={np.std(bot_scores):.3f}")
+    print("  Note: cosine similarity over 58-dim handcrafted features —")
+    print("        compare to the synthetic-classifier EER above for the same speaker model.")
+
+
+# ----------------------------------------------------------------------
+# CLI
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Speaker / AEC benchmarks")
+    parser = argparse.ArgumentParser(description="Speaker / AEC / STT benchmarks")
     parser.add_argument("--user", type=Path, help="optional user wav (16k mono) for enrollment")
     parser.add_argument("--bot", type=Path, help="optional bot wav (16k mono) for enrollment")
     parser.add_argument("--pairs", type=Path, help="VoxCeleb-style trials file (label wav_a wav_b)")
     parser.add_argument("--wav-dir", type=Path, help="root directory for wav files referenced by --pairs")
+    parser.add_argument(
+        "--stt",
+        choices=["vosk", "deepgram", "none", "auto"],
+        default="auto",
+        help="STT backend for WER eval: 'none' to skip, 'auto' to try both",
+    )
+    parser.add_argument(
+        "--stt-samples",
+        type=int,
+        default=20,
+        help="number of manifest clips to sample for STT eval (default 20)",
+    )
+    parser.add_argument(
+        "--personalized",
+        action="store_true",
+        help="run personalized speaker eval against data/dataset/user/*.wav",
+    )
     parser.add_argument("--quiet", action="store_true")
     args = parser.parse_args()
 
+    # Synthetic + AEC + latency always run (cheap and offline).
     benchmark_classifier(verbose=not args.quiet)
     benchmark_aec()
     benchmark_latency()
+
+    # Open-set pairs only if explicitly provided.
     if args.pairs and args.wav_dir:
         benchmark_open_set_pairs(args.pairs, args.wav_dir)
     else:
         print("\n[open-set] Skipped — pass --pairs <file> --wav-dir <dir> to compare against")
         print("           VoxCeleb-style benchmarks (the metric public papers report).")
         print("           See README 'Scoped vs general benchmark' for how to obtain the dataset.")
+
+    # STT eval
+    if args.stt == "none":
+        print("\n[stt] Skipped — --stt none")
+    else:
+        backends_to_try = ["deepgram", "vosk"] if args.stt == "auto" else [args.stt]
+        any_ran = False
+        for backend in backends_to_try:
+            factory = _try_import_stt(backend)
+            if factory is None:
+                print(f"\n[stt:{backend}] not available — skipping")
+                continue
+            any_ran = True
+            try:
+                benchmark_stt(factory, n_samples=args.stt_samples, backend_label=backend)
+            except Exception as exc:
+                print(f"\n[stt:{backend}] benchmark crashed: {exc}")
+        if not any_ran:
+            print("\n[stt] No STT backend available — install vosk or set DEEPGRAM_API_KEY")
+            print("      (set --stt none to silence this check).")
+
+    # Personalized speaker eval
+    run_personalized = args.personalized or args.stt == "auto"
+    # Always attempt when no explicit flag was passed — but skip cleanly
+    # if there are no operator wavs. This satisfies "default: run what you can".
+    if run_personalized or True:
+        benchmark_speaker_personalized()
+
     return 0
 
 

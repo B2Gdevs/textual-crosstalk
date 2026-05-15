@@ -31,6 +31,9 @@ recordings/
 data/
 data/dataset/
 output/
+.conduit/
+models/
+*.zip
 
 # IDE
 .vscode/

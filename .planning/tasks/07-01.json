@@ -1,0 +1,30 @@
+{
+  "id": "07-01",
+  "phase": "07",
+  "status": "in-progress",
+  "goal": "Tier 1 ONNX speaker classifier — replace 58-dim handcrafted features with a learned 192-dim speaker embedding from SpeechBrain ECAPA-TDNN converted to ONNX. Same SpeakerClassifier.classify interface so existing wiring (orchestrator, benchmark) is unchanged. Target: 24%→90%+ on the existing 5-voice ElevenLabs closed-set.",
+  "type": "code",
+  "keywords": "",
+  "depends": [
+    "06-05"
+  ],
+  "commands": [],
+  "files": [
+    "scripts/conduit_tui/speaker_id_onnx.py",
+    "requirements.txt"
+  ],
+  "agent_id": "",
+  "agent_role": "",
+  "runtime": "",
+  "model_profile": "",
+  "resolved_model": "",
+  "skill": "",
+  "claimed_by": "",
+  "claimed": false,
+  "claimed_at": "",
+  "lease_expires_at": "",
+  "completed_at": "",
+  "resolution": "",
+  "created_at": "2026-05-15T23:41:43.238Z",
+  "updated_at": "2026-05-15T23:41:43.238Z"
+}

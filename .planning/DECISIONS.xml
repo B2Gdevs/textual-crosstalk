@@ -195,4 +195,17 @@
     </references>
   </decision>
 
+  <decision id="CONDUIT-PROJ-D-023">
+    <title>README maps every post-submission change to its planning artifact; submission state preserved at 49086d9</title>
+    <date>2026-05-15</date>
+    <summary>Operator submitted the project to the reviewer at commit 49086d9 (2026-05-15 14:27 CST) with two Loom demo videos. Post-submission work continued and produced a stream of improvements documented across 23 decisions, 8 errors, 4 phases, and 30+ tasks. Decision: README now explicitly partitions submission state vs current state, lists 15 post-submission changes with commit SHA and planning artifact IDs, and embeds the benchmark snapshots that justify each piece of work. Two further Loom videos (setup walkthrough, barge-in iteration tour) added for context. The change makes the repo self-documenting: an external reviewer can trace from any line of the changelog to the task that drove it, the decision that justified it, or the error that motivated it.</summary>
+    <impact>Repo passes the 'cold reader' test for both the submission reviewer (who can confirm what was originally delivered) and any future maintainer (who can navigate the post-submission iteration history without external context). No mystery code.</impact>
+    <references>
+      <file path="README.md"/>
+      <file path=".planning/DECISIONS.xml"/>
+      <file path=".planning/ERRORS-AND-ATTEMPTS.xml"/>
+      <file path=".planning/ROADMAP.xml"/>
+    </references>
+  </decision>
+
 </decisions>

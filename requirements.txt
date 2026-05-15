@@ -2,6 +2,7 @@ textual>=0.50
 textual-dev>=1.0
 sounddevice>=0.4.6
 deepgram-sdk>=7.0,<8
+vosk>=0.3.45     # local-only STT alternative; set CONDUIT_STT=vosk to switch from Deepgram
 openai>=1.50
 elevenlabs>=1.0
 miniaudio>=1.59
@@ -9,3 +10,4 @@ pyaec>=1.0       # speexdsp AEC bindings (prebuilt win/mac/linux wheels) — pri
 python-dotenv>=1.0
 numpy>=1.24,<2.0
 httpx>=0.25
+onnxruntime>=1.16  # Tier 1 ONNX speaker classifier (scripts/conduit_tui/speaker_id_onnx.py); ~13 MB wheel + ~25 MB model cached under data/models/

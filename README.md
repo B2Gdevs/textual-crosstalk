@@ -4,8 +4,73 @@ A Python TUI program where you speak, an LLM responds in a human voice, and ever
 
 ## Demo videos
 
-- **Agents go off during the showcase** (two-way interruption getting chaotic in the best way) — https://www.loom.com/share/7e5b47ec7862425cacc0c174c75d04b5
+**Originally submitted (around the [`49086d9`](https://github.com/B2Gdevs/textual-crosstalk/commit/49086d9) commit, 2026-05-15 14:27 CST):**
+
+- **Agents go off during the showcase** (two-way interruption getting chaotic) — https://www.loom.com/share/7e5b47ec7862425cacc0c174c75d04b5
 - **Wrap-up walkthrough** — https://www.loom.com/share/33ba9b07cb694564aa2c8065b33cc3eb
+
+**Post-submission improvement videos:**
+
+- **Setup walkthrough + coding-agent workflow** — https://www.loom.com/share/193b775318d34848af388ca890cbf691
+- **Barge-in and self-pickup fixes** (timestamped tour of the iteration) — https://www.loom.com/share/771344888110415a89d8fb329a8673de
+
+## Submission state vs current state
+
+This repo was submitted in a working v1 state at commit [`49086d9`](https://github.com/B2Gdevs/textual-crosstalk/commit/49086d9). What's in `main` today goes well beyond that — same project, deeper work. The list below maps every meaningful change since submission to the planning artifact that records it.
+
+### What was in the submission (commit `49086d9`)
+
+| Capability | Status at submission |
+|---|---|
+| Mic → Deepgram (streaming STT with word-level finals) | ✅ |
+| OpenRouter / Groq / OpenAI LLM with fallback | ✅ |
+| ElevenLabs TTS with native char-level timestamps | ✅ |
+| Unified char timeline (JSONL, user + bot, ms precision) | ✅ |
+| Textual TUI with mic level + status + transcript panels | ✅ |
+| Crosstalk speculative LLM + cancellation | ✅ |
+| One-shot setup script + Demo videos in README | ✅ |
+
+### What's been added since (chronological, with planning anchors)
+
+| # | Change | Commit | Planning artifacts |
+|---|---|---|---|
+| 1 | Multi-word LLM trigger fix — Deepgram is_final batches were being collapsed to one token | [`b4334ed`](https://github.com/B2Gdevs/textual-crosstalk/commit/b4334ed) | task `CONDUIT-PROJ-T-04-01` · error `llm-never-fires-after-pause-2026-05-15` |
+| 2 | ElevenLabs free-tier TTS — model + format + voice + SDK field fixes | [`b4334ed`](https://github.com/B2Gdevs/textual-crosstalk/commit/b4334ed) | task `04-02` · decision `CONDUIT-PROJ-D-013` · error `elevenlabs-free-tier-three-walls-2026-05-15` |
+| 3 | User barge-in (partial-char threshold cuts TTS) | [`18db2e6`](https://github.com/B2Gdevs/textual-crosstalk/commit/18db2e6) | task `04-03` · decision `D-014` |
+| 4 | Text-layer echo guard (intermediate, later superseded) | [`398cd8a`](https://github.com/B2Gdevs/textual-crosstalk/commit/398cd8a), [`fd925d2`](https://github.com/B2Gdevs/textual-crosstalk/commit/fd925d2) | task `04-04` · decision `D-015` · error `bot-replies-to-itself-via-stt-echo-2026-05-15` |
+| 5 | Repo cleanup — drop unused runtime entrypoints + SOUL.md | [`8b92a4f`](https://github.com/B2Gdevs/textual-crosstalk/commit/8b92a4f) | task `04-05` |
+| 6 | Hard time-gate on finals during TTS+cooldown | [`b79eb8c`](https://github.com/B2Gdevs/textual-crosstalk/commit/b79eb8c) | task `04-07` · decision `D-016` |
+| 7 | Acoustic Echo Cancellation via speexdsp (pyaec) | [`d12f366`](https://github.com/B2Gdevs/textual-crosstalk/commit/d12f366), [`0be5ec6`](https://github.com/B2Gdevs/textual-crosstalk/commit/0be5ec6) | task `04-08` · decision `D-017` · errors `user-silenced-after-first-bot-turn-2026-05-15` |
+| 8 | Conversational tuning (preprocess off → on, MIN_WORDS=1, mic-gate status surfaced) | [`b5d11a8`](https://github.com/B2Gdevs/textual-crosstalk/commit/b5d11a8) | task `04-09` · decision `D-018` |
+| 9 | Barge gate-reclose fix (the actual "can't interrupt and continue" root cause) | [`54c9bf6`](https://github.com/B2Gdevs/textual-crosstalk/commit/54c9bf6) | task `04-10` · error `post-barge-cooldown-reclosed-gate-2026-05-15` |
+| 10 | Pure-numpy speaker classifier (Tier 0 — 29-dim MFCC + F0 + centroid + ZCR) | [`c69f46a`](https://github.com/B2Gdevs/textual-crosstalk/commit/c69f46a) | task `04-11` · decision `D-019` |
+| 11 | Honest benchmark harness — measure before claiming, revert AEC preprocess to ON | [`99b090c`](https://github.com/B2Gdevs/textual-crosstalk/commit/99b090c) | task `04-12` · decision `D-020` · error `unverified-accuracy-claim-2026-05-15` |
+| 12 | N-speaker classifier + VoxCeleb-O open-set mode + latency profile | [`c3a1b43`](https://github.com/B2Gdevs/textual-crosstalk/commit/c3a1b43) | task `04-13` · decision `D-021` |
+| 13 | Real ElevenLabs dataset (5 voices × 30 phrases) + scenario rotation + operator capture + first project skill | [`d0e86d1`](https://github.com/B2Gdevs/textual-crosstalk/commit/d0e86d1) | tasks `06-01..06-04` · decision `D-022` |
+| 14 | Real-data benchmark reveals Tier 0 ceiling (24% on real voices); Tier 1 ONNX planned | [`e9f5be8`](https://github.com/B2Gdevs/textual-crosstalk/commit/e9f5be8) | task `06-05` · error `classifier-tier0-fails-on-real-elevenlabs-2026-05-15` |
+| 15 | Vosk local STT (env-switch `CONDUIT_STT=vosk`) + WER benchmark + personalized eval | this commit | tasks `06-06, 08-01` |
+
+### Measured benchmark snapshots (against `e9f5be8`)
+
+| Metric | Synthetic floor | Real ElevenLabs |
+|---|---|---|
+| Speaker classifier 5-way closed-set accuracy | 80% | **24%** (chance 20%) |
+| Same-voice vs diff-voice cosine sim | 0.998 / 0.998 (synth) | 0.992 / 0.993 (real) |
+| AEC ERLE (pure echo) | ~−3 dB (single tone) / ~11.5 dB (broadband) | not measured on real loop yet |
+| Speaker classifier latency | 5.4 ms | same |
+| AEC latency per 64ms chunk | 2.8 ms | same |
+
+The 24%-on-real-voices number is **the** finding of post-submission work. It's why phase 07 (Tier 1 ONNX learned embeddings) was planned — same harness, expected 90%+. See [`ERRORS-AND-ATTEMPTS.xml`](.planning/ERRORS-AND-ATTEMPTS.xml) `classifier-tier0-fails-on-real-elevenlabs-2026-05-15` for the full finding.
+
+### Planning artifacts in this repo
+
+Every change above is recorded in machine-readable form under `.planning/`:
+
+- [`.planning/ROADMAP.xml`](.planning/ROADMAP.xml) — phases 00-08 (00 setup, 01-03 original submission, 04 robustness pass, 05 multi-speaker meeting planned, 06 test infrastructure, 07 Tier 1 ONNX planned, 08 Vosk STT)
+- [`.planning/DECISIONS.xml`](.planning/DECISIONS.xml) — 22 architecture decisions, each with rationale + references
+- [`.planning/ERRORS-AND-ATTEMPTS.xml`](.planning/ERRORS-AND-ATTEMPTS.xml) — 8 named failure modes with the rule each one teaches the next agent
+- [`.planning/tasks/*.json`](.planning/tasks/) — per-task records with attribution, status, file scope
+- [`.claude/skills/`](.claude/skills/) — first project-specific skill (`aec-before-text-echo-guards`) captured for future agents
 
 ## What it does
 
