@@ -22,4 +22,12 @@
       <depends>01</depends>
     </phase>
   </milestone>
+
+  <phase id="04">
+    <title>Robustness pass — multi-word LLM trigger, ElevenLabs free-tier, barge-in + echo guard, repo cleanup</title>
+    <goal>Production-readiness fixes after first user testing of the v1 build: ensure the LLM actually fires after a pause, ensure ElevenLabs TTS produces audio on a free-tier account, add user-initiated barge-in on partial words, prevent the bot from interrupting or talking to itself via STT echo, and remove dead runtime scaffolding that reads as junk to outside reviewers.</goal>
+    <status>in-progress</status>
+    <depends></depends>
+  </phase>
+
 </roadmap>

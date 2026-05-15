@@ -1,0 +1,30 @@
+{
+  "id": "04-04",
+  "phase": "04",
+  "status": "done",
+  "goal": "Echo guard so the bot does not interrupt or talk to itself. Without acoustic echo cancellation, TTS bleeds through the speakers into the mic, Deepgram transcribes the bot's own audio, and that transcription (a) tripped barge-in and cut TTS, (b) entered Crosstalk and made the bot reply to itself. Track normalized outgoing bot text during TTS + 250ms tail; classify a partial as echo only when EVERY word in it also appears in the bot text. Any novel word ('stop', 'wait', a name) cuts through and barges normally.",
+  "type": "code",
+  "keywords": "",
+  "depends": [
+    "04-03"
+  ],
+  "commands": [],
+  "files": [
+    "scripts/conduit_tui/orchestrator.py",
+    "README.md"
+  ],
+  "agent_id": "claude-opus-4-7",
+  "agent_role": "",
+  "runtime": "claude-code",
+  "model_profile": "",
+  "resolved_model": "",
+  "skill": "",
+  "claimed_by": "",
+  "claimed": false,
+  "claimed_at": "",
+  "lease_expires_at": "",
+  "completed_at": "",
+  "resolution": "",
+  "created_at": "2026-05-15T19:59:30.612Z",
+  "updated_at": "2026-05-15T20:00:11.476Z"
+}

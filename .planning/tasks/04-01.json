@@ -1,0 +1,27 @@
+{
+  "id": "04-01",
+  "phase": "04",
+  "status": "done",
+  "goal": "Fix orchestrator turn detection: Deepgram is_final batches multiple words; orchestrator was concatenating them into one pending_finals entry, so word_count stayed at 1 and never crossed MIN_WORDS_FOR_SPECULATION=3. Split chars by the word=X tag in CharEntry.notes so each Deepgram-emitted word becomes a real entry; word_count now reflects actual words spoken and Crosstalk fires the LLM after the user pauses.",
+  "type": "code",
+  "keywords": "",
+  "depends": [],
+  "commands": [],
+  "files": [
+    "scripts/conduit_tui/orchestrator.py"
+  ],
+  "agent_id": "claude-opus-4-7",
+  "agent_role": "",
+  "runtime": "claude-code",
+  "model_profile": "",
+  "resolved_model": "",
+  "skill": "",
+  "claimed_by": "",
+  "claimed": false,
+  "claimed_at": "",
+  "lease_expires_at": "",
+  "completed_at": "",
+  "resolution": "",
+  "created_at": "2026-05-15T19:59:10.954Z",
+  "updated_at": "2026-05-15T20:00:09.663Z"
+}

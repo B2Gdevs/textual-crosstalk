@@ -78,4 +78,37 @@
     <summary>Crosstalk impl approach based on tarzain/crosstalk (commit 327b2da). Silence-window algorithm: speculative LLM at 250ms post-last-is_final word, settle+commit at 600ms. Cancellation via asyncio.Task.cancel() — clean, no buffered audio loss. MIN_WORDS=3 guard prevents fragment speculation. No new VAD library — Deepgram is_final events are sufficient VAD signal. Thresholds are env-configurable via CROSSTALK_SPECULATIVE_THRESHOLD_MS / CROSSTALK_SETTLED_THRESHOLD_MS / CROSSTALK_MIN_WORDS.</summary>
   </decision>
 
+  <decision id="CONDUIT-PROJ-D-013">
+    <title>Free-tier ElevenLabs: eleven_flash_v2_5 + mp3_44100_128 + premade Sarah voice</title>
+    <date>2026-05-15</date>
+    <summary>ElevenLabs TTS on a free-tier account requires three concrete choices. (1) Model eleven_monolingual_v1 was deprecated on the free tier mid-2026; switch to eleven_flash_v2_5. (2) Output format pcm_44100 is Pro-tier-only; switch to mp3_44100_128 and decode via miniaudio before handing PCM to sounddevice. (3) Library voices (Rachel and similar) require a paid plan when called via API; default voice swapped to Sarah (EXAVITQu4vr4xnSDxMaL), a premade voice attached to the account that works on free tier. SDK response field is audio_base_64 with an underscore, not audio_base64 — easy footgun.</summary>
+    <impact>Unblocks audio output on any account without a paid plan. miniaudio adds a small native dependency but is pure pip-installable and works on Win/macOS/Linux.</impact>
+    <references>
+      <file path="scripts/conduit_tui/tts_client.py"/>
+      <file path="requirements.txt"/>
+      <file path=".env.local"/>
+    </references>
+  </decision>
+
+  <decision id="CONDUIT-PROJ-D-014">
+    <title>Barge-in via Deepgram partial-char threshold, not VAD</title>
+    <date>2026-05-15</date>
+    <summary>User-initiated barge-in is gated by BARGE_IN_PARTIAL_CHARS — the minimum number of characters in a Deepgram interim transcript that triggers sounddevice.stop() while TTS is playing. Default 3. Chose this over an RMS/VAD energy threshold because (a) Deepgram is already doing high-quality VAD upstream, (b) char count is hardware-independent (mic sensitivity, distance, room noise vary), (c) the same threshold doubles as a confidence signal that real speech is happening, not just a cough.</summary>
+    <impact>Predictable barge behavior across hardware. Tunable by the operator. The 'how chaotic two-way can get' demo behavior is preserved when threshold is low; raising it suppresses noise.</impact>
+    <references>
+      <file path="scripts/conduit_tui/orchestrator.py"/>
+      <file path="README.md"/>
+    </references>
+  </decision>
+
+  <decision id="CONDUIT-PROJ-D-015">
+    <title>Echo guard via bot-text word-set membership, no AEC</title>
+    <date>2026-05-15</date>
+    <summary>The mic picks up the bot's TTS through the speakers (no acoustic echo cancellation in the stack). Without filtering, the bot transcribes itself, which (a) tripped barge-in mid-sentence and (b) made the bot reply to itself in a feedback loop. The guard normalizes both the bot's outgoing text and each incoming Deepgram partial/final (lowercase, strip punctuation, collapse whitespace) and classifies the partial as echo only when EVERY word in it appears in the bot's text. The presence of even one novel word ('stop', 'wait', a name) means real user speech — barge fires. Guard stays armed for 250ms after sd.play() returns to absorb late finals; longer tails started swallowing the next legitimate user turn.</summary>
+    <impact>Restores reliable human barge-in. Trade-off: if the user happens to say only words the bot is already using, barge is suppressed — accepted as a rare edge case. A future AEC step (e.g., echo subtraction using TTS char timeline) would remove the trade-off.</impact>
+    <references>
+      <file path="scripts/conduit_tui/orchestrator.py"/>
+    </references>
+  </decision>
+
 </decisions>

@@ -1,0 +1,31 @@
+{
+  "id": "04-02",
+  "phase": "04",
+  "status": "done",
+  "goal": "Repair ElevenLabs TTS on a free-tier account. Three bugs: (a) model eleven_monolingual_v1 deprecated on free tier, switch to eleven_flash_v2_5; (b) output_format pcm_44100 is Pro-only, switch to mp3_44100_128; (c) SDK response field is audio_base_64 with underscore, not audio_base64. Default voice swapped from Rachel (library, paid) to Sarah (premade, free). Playback now decodes mp3 via miniaudio before sounddevice.",
+  "type": "code",
+  "keywords": "",
+  "depends": [
+    "04-01"
+  ],
+  "commands": [],
+  "files": [
+    "scripts/conduit_tui/tts_client.py",
+    "requirements.txt",
+    ".env.local"
+  ],
+  "agent_id": "claude-opus-4-7",
+  "agent_role": "",
+  "runtime": "claude-code",
+  "model_profile": "",
+  "resolved_model": "",
+  "skill": "",
+  "claimed_by": "",
+  "claimed": false,
+  "claimed_at": "",
+  "lease_expires_at": "",
+  "completed_at": "",
+  "resolution": "",
+  "created_at": "2026-05-15T19:59:14.696Z",
+  "updated_at": "2026-05-15T20:00:10.257Z"
+}

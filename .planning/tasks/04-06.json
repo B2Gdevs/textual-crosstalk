@@ -1,0 +1,30 @@
+{
+  "id": "04-06",
+  "phase": "04",
+  "status": "done",
+  "goal": "README polish for external submission. Add Demo videos section at top with both Loom links (showcase chaos + wrap-up); document one-shot setup scripts (setup.ps1, setup.sh); correct default voice id (Sarah, not Rachel); document barge-in + echo guard with their env vars; replace verbatim submission letter with a short Author line.",
+  "type": "docs",
+  "keywords": "",
+  "depends": [
+    "04-04",
+    "04-05"
+  ],
+  "commands": [],
+  "files": [
+    "README.md"
+  ],
+  "agent_id": "claude-opus-4-7",
+  "agent_role": "",
+  "runtime": "claude-code",
+  "model_profile": "",
+  "resolved_model": "",
+  "skill": "",
+  "claimed_by": "",
+  "claimed": false,
+  "claimed_at": "",
+  "lease_expires_at": "",
+  "completed_at": "",
+  "resolution": "",
+  "created_at": "2026-05-15T19:59:36.653Z",
+  "updated_at": "2026-05-15T20:00:12.732Z"
+}

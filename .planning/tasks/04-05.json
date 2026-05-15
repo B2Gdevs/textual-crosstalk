@@ -1,0 +1,28 @@
+{
+  "id": "04-05",
+  "phase": "04",
+  "status": "done",
+  "goal": "Drop unused runtime scaffolding. Project was built with Claude Code only — .opencode/AGENTS.md, .cursorrules, GEMINI.md, and SOUL.md were leftover scaffolding from earlier setup that read as junk to an outside reviewer. Remove them; strip dangling references from AGENTS.md (soul pointer section, 'other runtime entrypoints' suggestion) and CLAUDE.md (sibling-runtime bullet).",
+  "type": "cleanup",
+  "keywords": "",
+  "depends": [],
+  "commands": [],
+  "files": [
+    "AGENTS.md",
+    "CLAUDE.md"
+  ],
+  "agent_id": "claude-opus-4-7",
+  "agent_role": "",
+  "runtime": "claude-code",
+  "model_profile": "",
+  "resolved_model": "",
+  "skill": "",
+  "claimed_by": "",
+  "claimed": false,
+  "claimed_at": "",
+  "lease_expires_at": "",
+  "completed_at": "",
+  "resolution": "",
+  "created_at": "2026-05-15T19:59:34.168Z",
+  "updated_at": "2026-05-15T20:00:12.119Z"
+}
