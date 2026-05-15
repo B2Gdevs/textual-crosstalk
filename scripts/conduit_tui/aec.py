@@ -134,13 +134,22 @@ class SpeexEchoCanceller(EchoCancellerBase):
         )
 
     def process(self, mic_int16: np.ndarray) -> np.ndarray:
+        F = self.frame_size
+        # If the pending reference is shorter than one AEC frame, drop
+        # it — it's a leftover tail from a TTS that just ended and we
+        # cannot cancel a partial frame anyway. Without this, an
+        # un-drainable residual would stall mic_buf forever and the
+        # mic_pump would silently send nothing to Deepgram (user can't
+        # be heard between turns).
+        if 0 < self._ref_buf.size < F:
+            self._ref_buf = np.zeros(0, dtype=np.int16)
+
         if self._ref_buf.size == 0 and self._mic_buf.size == 0:
             return mic_int16
         if self._ref_buf.size == 0:
             return self._flush_passthrough(mic_int16)
 
         self._mic_buf = np.concatenate([self._mic_buf, mic_int16])
-        F = self.frame_size
 
         out_chunks: list[np.ndarray] = []
         while self._mic_buf.size >= F and self._ref_buf.size >= F:
@@ -154,6 +163,12 @@ class SpeexEchoCanceller(EchoCancellerBase):
             raw = self._ec.cancel_echo(mic_frame.tobytes(), ref_frame.tobytes())
             b = bytes(v & 0xFF for v in raw)
             out_chunks.append(np.frombuffer(b, dtype=np.int16))
+
+        # If the loop didn't run because ref_buf shrank below one frame
+        # mid-processing, flush whatever's in mic_buf as pass-through so
+        # we don't strand the user's voice in the queue.
+        if not out_chunks and self._ref_buf.size < F:
+            return self._flush_passthrough(np.zeros(0, dtype=np.int16))
 
         if not out_chunks:
             return np.zeros(0, dtype=np.int16)
@@ -192,6 +207,13 @@ class NumpyEchoCanceller(EchoCancellerBase):
         self.ref_history = np.zeros(self.L - 1, dtype=np.float32)
 
     def process(self, mic_int16: np.ndarray) -> np.ndarray:
+        # Drop residual reference shorter than the filter length — we
+        # can't run NLMS without a full window, and leaving it queued
+        # would stall the mic buffer forever (Deepgram would never see
+        # user speech between turns).
+        if 0 < self._ref_buf.size < self.L:
+            self._ref_buf = np.zeros(0, dtype=np.int16)
+
         if self._ref_buf.size == 0 and self._mic_buf.size == 0:
             return mic_int16
         if self._ref_buf.size == 0:
@@ -200,7 +222,10 @@ class NumpyEchoCanceller(EchoCancellerBase):
         self._mic_buf = np.concatenate([self._mic_buf, mic_int16])
         n = int(min(self._mic_buf.size, self._ref_buf.size))
         if n < self.L:
-            return np.zeros(0, dtype=np.int16)
+            # Same defense — flush mic to passthrough if we can't form
+            # a window. Drop the residual reference.
+            self._ref_buf = np.zeros(0, dtype=np.int16)
+            return self._flush_passthrough(np.zeros(0, dtype=np.int16))
 
         mic_block = self._mic_buf[:n].astype(np.float32) / 32768.0
         ref_block = self._ref_buf[:n].astype(np.float32) / 32768.0

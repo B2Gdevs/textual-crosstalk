@@ -385,6 +385,13 @@ class ConversationLoop:
                 await self._tts.play_audio(audio_bytes)
             finally:
                 self._tts_playing = False
+                # Drain AEC. Any residual reference samples that mic_pump
+                # didn't consume (rate slop at TTS edges) would otherwise
+                # be cancelled against pure user speech on the next turn
+                # and silence the user. The AEC also drops sub-frame
+                # residuals on its own, but explicit clear here is the
+                # cheapest belt + suspenders.
+                self._aec.clear_reference()
                 # Cooldown after natural TTS end — the speaker may still
                 # be sending echo for ~hundreds of ms after sd.play()
                 # returns. A barge would have already opened the gate.
