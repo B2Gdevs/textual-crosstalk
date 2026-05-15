@@ -160,23 +160,46 @@ class ConversationLoop:
         if self._on_chars:
             self._on_chars(chars)
 
-        # Reconstruct word text for final callback
-        word = "".join(c.char for c in chars if c.char.strip())
-        if word:
-            self._pending_finals.append(word)
-            full = " ".join(self._pending_finals)
-            word_count = len(self._pending_finals)
+        # Split chars into distinct words using the "word=X" tag in notes.
+        # Deepgram may bundle several words into one is_final batch; without
+        # this split they'd be concatenated into a single token and the
+        # MIN_WORDS_FOR_SPECULATION gate in Crosstalk would never trip.
+        words_in_batch: list[str] = []
+        current_chars: list[str] = []
+        current_tag: str | None = None
+        for c in chars:
+            tag = next(
+                (p for p in c.notes.split(",") if p.startswith("word=")),
+                None,
+            )
+            if tag != current_tag and current_chars:
+                words_in_batch.append("".join(current_chars))
+                current_chars = []
+            current_tag = tag
+            if c.char.strip():
+                current_chars.append(c.char)
+        if current_chars:
+            words_in_batch.append("".join(current_chars))
 
-            if self._on_user_final:
-                self._on_user_final(full)
-            if self._on_status:
-                self._on_status("stt", "final")
+        if not words_in_batch:
+            return
 
-            # Keep crosstalk history in sync, then notify
-            self._crosstalk.set_history(self._history)
-            if self._on_status:
-                self._on_status("llm", "speculating")
-            asyncio.create_task(self._crosstalk.on_word_final(full, word_count))
+        for w in words_in_batch:
+            self._pending_finals.append(w)
+
+        full = " ".join(self._pending_finals)
+        word_count = len(self._pending_finals)
+
+        if self._on_user_final:
+            self._on_user_final(full)
+        if self._on_status:
+            self._on_status("stt", "final")
+
+        # Keep crosstalk history in sync, then notify
+        self._crosstalk.set_history(self._history)
+        if self._on_status:
+            self._on_status("llm", "speculating")
+        asyncio.create_task(self._crosstalk.on_word_final(full, word_count))
 
     # ------------------------------------------------------------------
     # Crosstalk response handler — called when speculation settles

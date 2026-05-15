@@ -24,17 +24,20 @@ try:
 except ImportError:
     ElevenLabs = None  # type: ignore[assignment,misc]
 
+try:
+    import miniaudio  # MP3 decoder — free-tier ElevenLabs only emits mp3
+except ImportError:
+    miniaudio = None  # type: ignore[assignment]
+
 
 class ElevenLabsClient:
     """ElevenLabs TTS with char-level timestamp support."""
 
-    SAMPLE_RATE = 44100  # Matches output_format="pcm_44100" — int16 mono, no decode needed
-
     def __init__(
         self,
         api_key: str,
-        voice_id: str = "21m00Tcm4TlvDq8ikWAM",
-        model_id: str = "eleven_monolingual_v1",
+        voice_id: str = "EXAVITQu4vr4xnSDxMaL",  # Sarah — premade, free-tier OK
+        model_id: str = "eleven_flash_v2_5",
     ) -> None:
         if ElevenLabs is None:
             raise ImportError("elevenlabs package not installed — pip install elevenlabs")
@@ -70,13 +73,13 @@ class ElevenLabsClient:
             voice_id=self._voice_id,
             text=text,
             model_id=self._model_id,
-            output_format="pcm_44100",
+            output_format="mp3_44100_128",  # free-tier compatible
         )
 
-        # Response has: audio_base64, alignment dict
+        # SDK field is audio_base_64 (with underscore) — not audio_base64.
         import base64
 
-        audio_bytes = base64.b64decode(response.audio_base64)
+        audio_bytes = base64.b64decode(response.audio_base_64)
 
         char_entries: list[CharEntry] = []
         alignment = response.alignment
@@ -98,13 +101,22 @@ class ElevenLabsClient:
         return audio_bytes, char_entries
 
     async def play_audio(self, audio_bytes: bytes) -> None:
-        """Play raw int16 PCM @ 44.1kHz via sounddevice. Runs in executor."""
+        """Decode MP3 + play via sounddevice. Runs in executor."""
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._sync_play, audio_bytes)
 
     def _sync_play(self, audio_bytes: bytes) -> None:
+        if not audio_bytes:
+            return
         try:
-            samples = np.frombuffer(audio_bytes, dtype=np.int16)
-            sd.play(samples, samplerate=self.SAMPLE_RATE, blocking=True)
+            if miniaudio is None:
+                raise RuntimeError(
+                    "miniaudio not installed — pip install miniaudio (needed to decode mp3)"
+                )
+            decoded = miniaudio.decode(audio_bytes)
+            samples = np.frombuffer(decoded.samples, dtype=np.int16)
+            if decoded.nchannels > 1:
+                samples = samples.reshape(-1, decoded.nchannels)
+            sd.play(samples, samplerate=decoded.sample_rate, blocking=True)
         except Exception as exc:
             print(f"[tts] playback error: {exc}")

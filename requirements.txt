@@ -4,6 +4,7 @@ sounddevice>=0.4.6
 deepgram-sdk>=7.0,<8
 openai>=1.50
 elevenlabs>=1.0
+miniaudio>=1.59
 python-dotenv>=1.0
 numpy>=1.24,<2.0
 httpx>=0.25
