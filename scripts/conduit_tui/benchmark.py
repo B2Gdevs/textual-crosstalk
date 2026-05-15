@@ -915,12 +915,12 @@ def main() -> int:
             print("\n[stt] No STT backend available — install vosk or set DEEPGRAM_API_KEY")
             print("      (set --stt none to silence this check).")
 
-    # Personalized speaker eval
-    run_personalized = args.personalized or args.stt == "auto"
-    # Always attempt when no explicit flag was passed — but skip cleanly
-    # if there are no operator wavs. This satisfies "default: run what you can".
-    if run_personalized or True:
-        benchmark_speaker_personalized()
+    # Personalized speaker eval — always attempted by default; skips
+    # cleanly when no operator wavs exist. The --personalized flag is
+    # retained as a no-op kept for explicitness in scripts that want to
+    # signal intent (and for future suppression of the default).
+    _ = args.personalized  # silence "unused" linters; flag is documented
+    benchmark_speaker_personalized()
 
     return 0
 

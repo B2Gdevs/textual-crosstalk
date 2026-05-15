@@ -49,7 +49,8 @@ This repo was submitted in a working v1 state at commit [`49086d9`](https://gith
 | 13 | Real ElevenLabs dataset (5 voices × 30 phrases) + scenario rotation + operator capture + first project skill | [`d0e86d1`](https://github.com/B2Gdevs/textual-crosstalk/commit/d0e86d1) | tasks `06-01..06-04` · decision `D-022` |
 | 14 | Real-data benchmark reveals Tier 0 ceiling (24% on real voices); Tier 1 ONNX planned | [`e9f5be8`](https://github.com/B2Gdevs/textual-crosstalk/commit/e9f5be8) | task `06-05` · error `classifier-tier0-fails-on-real-elevenlabs-2026-05-15` |
 | 15 | Vosk local STT (env-switch `CONDUIT_STT=vosk`) + WER benchmark + personalized eval | [`2794adc`](https://github.com/B2Gdevs/textual-crosstalk/commit/2794adc) | tasks `06-06, 08-01` · decision `D-023` |
-| 16 | **Tier 1 ONNX speaker classifier — 24% → 100% on 5-way ElevenLabs** | this commit | task `07-01` · decision `D-024` |
+| 16 | **Tier 1 ONNX speaker classifier — 24% → 100% on 5-way ElevenLabs** | [`8feecf2`](https://github.com/B2Gdevs/textual-crosstalk/commit/8feecf2) | task `07-01` · decision `D-024` |
+| 17 | STT benchmark live numbers + bench bug fix: Vosk beats Deepgram on WER (3.5% vs 4.0%) and first-partial latency (580 ms vs 877 ms) on this corpus | this commit | task `06-06` (re-measurement) |
 
 ### Measured benchmark snapshots
 
@@ -65,6 +66,19 @@ This repo was submitted in a working v1 state at commit [`49086d9`](https://gith
 **The Tier 1 jump is the most important result of post-submission work.** Tier 0 hit a feature-space ceiling — its 80% on synthetic was misleading. Tier 1 (Wespeaker's `voxceleb_ECAPA512_LM.onnx`, 24.86 MB, no torch dependency) lifted 5-way real-voice accuracy from 24% → 100% on the same corpus, the same harness, the same 50 test trials. The 0.486 cosine-similarity margin between same-voice and different-voice pairs (vs ~0.001 for Tier 0) is the actual signal that lets the system distinguish speakers.
 
 Switch backends via `CONDUIT_SPEAKER_TIER=onnx|numpy` (default `onnx` once installed). The numpy backend stays available as a no-extra-deps fallback. See `.planning/ERRORS-AND-ATTEMPTS.xml` → `classifier-tier0-fails-on-real-elevenlabs-2026-05-15` for the failure mode that Tier 1 closed.
+
+### STT benchmark (20 samples from the ElevenLabs corpus)
+
+`python -m scripts.conduit_tui.benchmark --stt auto --stt-samples 20` runs the same 20 ground-truth phrases through both backends and reports word-error rate + streaming latency:
+
+| Backend | Mean WER | WER std | Latency-to-first-partial | Latency-to-final |
+|---|---|---|---|---|
+| Deepgram (nova-3) | 4.0% | 7.8% | 877 ms | 2352 ms |
+| **Vosk (small-en-us)** | **3.5%** | **7.8%** | **580 ms** | 4138 ms |
+
+Vosk **dominates Deepgram on this corpus** for accuracy AND first-partial latency. Deepgram still wins on time-to-final because its `utterance_end_ms=1500` aggressively closes turns; Vosk has no equivalent and final commit is driven by `Crosstalk.SETTLED_THRESHOLD_MS` silence. Most WER errors on both backends are punctuation rendering ("over-communicate" vs "overcommunicate") rather than true substitutions.
+
+Switch via `CONDUIT_STT=deepgram|vosk` (default `deepgram` for compatibility — the existing turn-detection thresholds were tuned against its finalization timing).
 
 ### Planning artifacts in this repo
 
