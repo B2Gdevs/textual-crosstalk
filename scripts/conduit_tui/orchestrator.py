@@ -29,7 +29,10 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
+import numpy as np
 
+
+from .aec import make_echo_canceller
 from .char_timeline import CharEntry, JsonlStore
 from .crosstalk import Crosstalk
 from .deepgram_client import DeepgramStream
@@ -74,6 +77,7 @@ class ConversationLoop:
         llm: LLMClient,
         tts: ElevenLabsClient,
         session_start: float,
+        sample_rate: int = 16000,
         on_user_partial: Callable[[str], None] | None = None,
         on_user_final: Callable[[str], None] | None = None,
         on_bot_response: Callable[[str, float, str], None] | None = None,
@@ -101,6 +105,12 @@ class ConversationLoop:
 
         # Turn accumulation (fed to Crosstalk)
         self._pending_finals: list[str] = []
+
+        # Acoustic echo canceller — primary defense against the
+        # bot-replies-to-itself loop. Subtracts the bot's known TTS
+        # output from the live mic input before Deepgram ever sees it.
+        # See scripts/conduit_tui/aec.py for backend selection.
+        self._aec = make_echo_canceller(mic_rate=sample_rate)
 
         # Barge-in state
         self._tts_playing = False
@@ -166,7 +176,14 @@ class ConversationLoop:
         while self._running:
             try:
                 chunk = await asyncio.wait_for(self._mic.read(), timeout=0.5)
-                await self._dg.send(chunk)
+                # AEC: subtract the bot's known TTS audio from this mic
+                # chunk before it reaches Deepgram. With no active
+                # reference (bot not speaking), this is a fast no-op
+                # pass-through.
+                mic_arr = np.frombuffer(chunk, dtype=np.int16)
+                cleaned = self._aec.process(mic_arr)
+                if cleaned.size > 0:
+                    await self._dg.send(cleaned.tobytes())
             except asyncio.TimeoutError:
                 continue
             except asyncio.CancelledError:
@@ -240,6 +257,10 @@ class ConversationLoop:
         # is the trustworthy signal that they're speaking, not the bot.
         self._finals_gate_until = time.monotonic()
         self._current_bot_text_norm = ""
+        # Drop any pending AEC reference — speaker is silent now, so
+        # subsequent mic chunks should not be cancelled against the
+        # cut-off bot audio.
+        self._aec.clear_reference()
         if self._on_status:
             self._on_status("tts", "barged")
 
@@ -353,6 +374,13 @@ class ConversationLoop:
             # finally branch once we know playback actually ended.
             est_duration_s = max(1.5, len(bot_text) / 12.0)
             self._finals_gate_until = time.monotonic() + est_duration_s + 5.0
+            # Push the bot's audio to the AEC reference stream BEFORE
+            # playback starts. Decode runs in a worker thread so we
+            # don't block the event loop. While decode is in flight,
+            # mic_pump may process a chunk or two with no reference yet
+            # — those arrive before the speaker has actually started
+            # producing echo, so the pass-through is correct.
+            await asyncio.to_thread(self._aec.push_reference_mp3, audio_bytes)
             try:
                 await self._tts.play_audio(audio_bytes)
             finally:

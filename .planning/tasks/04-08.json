@@ -1,0 +1,33 @@
+{
+  "id": "04-08",
+  "phase": "04",
+  "status": "done",
+  "goal": "Acoustic echo cancellation via speexdsp (pyaec). Adds scripts/conduit_tui/aec.py with SpeexEchoCanceller (primary) + NumpyEchoCanceller (fallback). Orchestrator pushes decoded TTS PCM to AEC reference before play_audio (via asyncio.to_thread so mp3 decode doesn't block the event loop) and routes every mic chunk through aec.process() before sending to Deepgram. Cancels reference on barge-in so post-cut mic chunks pass through cleanly. Result: ~20 dB ERLE after convergence on synthetic round-trip test — bot's voice is suppressed at the audio layer, before Deepgram even sees it, so the self-reply loop dissolves at the source.",
+  "type": "code",
+  "keywords": "",
+  "depends": [
+    "04-07"
+  ],
+  "commands": [],
+  "files": [
+    "scripts/conduit_tui/aec.py",
+    "scripts/conduit_tui/orchestrator.py",
+    "scripts/conduit_tui/conversation_screen.py",
+    "requirements.txt",
+    "README.md"
+  ],
+  "agent_id": "claude-opus-4-7",
+  "agent_role": "",
+  "runtime": "claude-code",
+  "model_profile": "",
+  "resolved_model": "",
+  "skill": "",
+  "claimed_by": "",
+  "claimed": false,
+  "claimed_at": "",
+  "lease_expires_at": "",
+  "completed_at": "",
+  "resolution": "",
+  "created_at": "2026-05-15T20:36:21.221Z",
+  "updated_at": "2026-05-15T20:36:21.610Z"
+}

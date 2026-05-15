@@ -121,4 +121,16 @@
     </references>
   </decision>
 
+  <decision id="CONDUIT-PROJ-D-017">
+    <title>Self-reply loop fixed at the audio layer via speexdsp AEC, not at the text or time layer</title>
+    <date>2026-05-15</date>
+    <summary>Text-content echo guard (D-015) and hard time gate on finals (D-016) were both downstream fixes — they tried to detect echo AFTER Deepgram had already transcribed it. Both leave failure modes (text hallucinations slip the heuristic; time gate prevents legitimate user interruption). The correct layer is audio: we know exactly what the bot is playing (the PCM we just handed to sounddevice), so we can run an adaptive filter against the mic input and subtract the bot's voice BEFORE Deepgram ever sees it. Backend: pyaec (ctypes bindings around speexdsp's AEC + preprocessor — same algorithm used by FreeSWITCH/Asterisk/SIP, battle-tested for 20+ years, prebuilt Windows/macOS/Linux wheels). Pure-numpy block-NLMS fallback retained for environments without pyaec. Measured ~20 dB ERLE after convergence on a synthetic round-trip test — bot audio is attenuated by 10x in the mic stream that reaches Deepgram. Time gate kept as a safety belt for the first few frames of convergence; with AEC working it's mostly redundant.</summary>
+    <impact>Loop dissolves at the source. Deepgram receives only the residual (real user speech + small AEC error). Crosstalk no longer needs to be defended downstream. The human can speak at any moment — including over the bot — and be heard, because the bot's voice has already been subtracted. No new compile-time dependencies on Windows (pyaec ships a wheel). Numpy fallback ensures graceful degrade.</impact>
+    <references>
+      <file path="scripts/conduit_tui/aec.py"/>
+      <file path="scripts/conduit_tui/orchestrator.py"/>
+      <file path="requirements.txt"/>
+    </references>
+  </decision>
+
 </decisions>

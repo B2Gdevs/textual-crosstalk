@@ -115,14 +115,24 @@ Fragments under 3 words (e.g. "um", "yeah") are never speculated on — avoids w
 
 **Barge-in:** when the bot is mid-sentence, the first Deepgram partial that reaches `BARGE_IN_PARTIAL_CHARS` characters calls `sounddevice.stop()` and the TTS state flips to `barged`. The user's subsequent `is_final` enters the normal Crosstalk path and starts a fresh turn. Raise the threshold to suppress short noises (cough, "uh"); lower it for more aggressive barge.
 
-**Echo guard / self-reply prevention:** without an AEC step, the bot's own audio bleeds through the speakers into the mic and Deepgram transcribes it. Text-only echo detection isn't enough — Deepgram occasionally hallucinates a novel word from coughs/breath/room noise, and that's all it takes for the bot to enter a Crosstalk cycle and reply to itself.
+**Acoustic echo cancellation (AEC).** The primary defense against the bot-replies-to-itself loop. We have the reference signal — the exact PCM the bot is about to play — so we run a real adaptive filter against the live mic stream and subtract the bot's voice before it ever reaches Deepgram.
 
-The fix is a **hard time gate**: during TTS playback (and for `POST_TTS_COOLDOWN_S` afterward), `is_final` events are dropped before they can reach Crosstalk. Two ways the gate opens:
+Backend: [`pyaec`](https://pypi.org/project/pyaec/) — ctypes bindings around speexdsp's AEC + preprocessor (same algorithm used by FreeSWITCH, Asterisk, and most SIP clients). Prebuilt Windows/macOS/Linux wheels, no toolchain. Pure-numpy block-NLMS fallback (`scripts/conduit_tui/aec.py`) if `pyaec` is unavailable.
 
-1. **Barge-in.** When a partial crosses `BARGE_IN_PARTIAL_CHARS` we call `sounddevice.stop()` AND open the gate immediately — the user's intentional interruption is the most trustworthy signal that real human speech is on the wire.
-2. **Natural TTS end.** Gate stays closed for `POST_TTS_COOLDOWN_S` after `sd.play()` returns to absorb late echo, then reopens.
+Wiring:
+- `_handle_committed_response` pushes the decoded TTS audio to the AEC reference stream before playback starts (`asyncio.to_thread` so the mp3 decode doesn't block the event loop).
+- `_mic_pump` runs every mic chunk through `aec.process()` before sending to Deepgram. With no active reference the call is a fast pass-through.
+- Barge-in calls `aec.clear_reference()` so post-cutoff mic chunks aren't cancelled against bot audio that's no longer playing.
 
-A separate word-set echo heuristic still runs on partials during TTS so that **barge-in itself** isn't tripped by the bot's own audio — the bot can still see its own transcript flow through, it just won't be allowed to cut itself off OR talk back.
+Measured on a synthetic round-trip test: ~20 dB ERLE (echo return loss enhancement) after convergence. Real speech with a real speaker→mic path typically does better because the reference has richer spectral content.
+
+**Time-gate safety belt (legacy).** The pre-AEC fix is still in place as a safety net while the speex filter is converging during the first frames of a bot turn — `is_final` events are dropped from Crosstalk during TTS playback + `POST_TTS_COOLDOWN_S` afterward. With AEC working this is largely redundant, but cheap to keep. Barge-in opens the gate immediately so an intentional interruption isn't suppressed.
+
+| Variable | Default | Notes |
+|---|---|---|
+| `AEC_FILTER_MS` | `128` | speex tail length in ms — coverage for speaker latency + room reverb |
+| `AEC_FRAME_MS` | `10` | AEC processing frame size in ms |
+| `AEC_MU` | `0.3` | step size for numpy fallback (ignored when speex is active) |
 
 Implementation: `scripts/conduit_tui/crosstalk.py` (coordinator) + `scripts/conduit_tui/orchestrator.py` (wiring).
 Reference: https://github.com/tarzain/crosstalk (commit 327b2da).

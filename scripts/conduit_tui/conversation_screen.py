@@ -172,6 +172,7 @@ class ConversationScreen(Screen):
                 llm=llm,
                 tts=tts,
                 session_start=self._session_start,
+                sample_rate=sample_rate,
                 on_user_partial=self._on_user_partial,
                 on_user_final=self._on_user_final,
                 on_bot_response=self._on_bot_response,
