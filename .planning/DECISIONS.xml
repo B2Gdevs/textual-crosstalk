@@ -158,4 +158,16 @@
     </references>
   </decision>
 
+  <decision id="CONDUIT-PROJ-D-020">
+    <title>Benchmark before claiming numbers; report what we measured not what we hoped</title>
+    <date>2026-05-15</date>
+    <summary>README previously claimed 85-90 percent classifier accuracy citing literature; benchmark harness reveals 80 percent on a synthetic-voice corpus (5 user clips + 5 bot clips, formant-synth, 2 false acceptances of bot-as-user). Synthetic sinusoidal voices are adversarial for MFCC features because they have less spectral diversity than real speech; real human + ElevenLabs TTS pairs should separate more cleanly. Decision: report measured numbers + disclose the synthetic-vs-real gap rather than echo literature claims. Benchmark harness accepts real wav files via --user/--bot so operators can produce environment-specific numbers. Also: AEC_PREPROCESS env knob defaulted back to ON — benchmark showed cleaned signal with large transients (max abs 32681 vs echo max 1600) when preprocess was disabled. The earlier 'preprocess off' default was a wrong fix for the post-barge gating issue; that issue was the gate-reclose state-machine bug (E6, fixed in 54c9bf6) and does not require disabling preprocess.</summary>
+    <impact>Stops the README from over-promising. Future tier upgrades (ONNX ECAPA-TDNN, distilled int8 model) are compared against the SAME harness on the SAME synthetic corpus plus operator-supplied real recordings — apples-to-apples size/accuracy tradeoff visible at decision time, not retroactively. AEC default restored to working state.</impact>
+    <references>
+      <file path="scripts/conduit_tui/benchmark.py"/>
+      <file path="scripts/conduit_tui/aec.py"/>
+      <file path="README.md"/>
+    </references>
+  </decision>
+
 </decisions>

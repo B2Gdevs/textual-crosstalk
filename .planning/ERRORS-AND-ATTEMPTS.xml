@@ -51,4 +51,13 @@
     <rule>State machine fixes: when one path opens a gate, every other path that touches the same gate must check whether the open is still valid before re-closing. Pattern: 'only close if currently in the future'. For text-similarity classifiers used to gate intentional user actions, require a minimum length (&gt;= 2 words) — short matches are too ambiguous to silently suppress.</rule>
     <reference>scripts/conduit_tui/orchestrator.py</reference>
   </entry>
+
+  <entry id="unverified-accuracy-claim-2026-05-15" date="2026-05-15" phase="04" task="04-12" status="resolved" kind="verification">
+    <summary>README claimed 85-90% classifier accuracy without measuring; actual synthetic-corpus result was 80%</summary>
+    <context>After shipping the pure-numpy speaker classifier I claimed '~85-90% accuracy on a closed-set 2-speaker task' in the README. User pushed back asking how we were benchmarking. Answer: we weren't.</context>
+    <failure>Claimed numbers came from classical-MFCC speaker-ID literature (Reynolds 1995 era), not from our implementation, our features, or our TTS voice. Worse, this number was used to justify shipping Tier 0 without escalating to Tier 1 (ONNX). When I finally built a benchmark, the synthetic-corpus accuracy came in at 80% with EER 20% — and the AEC ERLE was actively negative on the same test, meaning the cleaned signal was LOUDER than the input echo.</failure>
+    <rule>Never publish accuracy numbers you have not measured on your own implementation. Build the benchmark harness BEFORE writing the accuracy claim. Synthetic tests are the floor not the ceiling — pure sinusoidal voices are adversarial for spectral-envelope features; report both 'on this synthetic corpus' AND 'pass --user/--bot wavs for your real conditions'.</rule>
+    <reference>scripts/conduit_tui/benchmark.py</reference>
+    <reference>README.md</reference>
+  </entry>
 </errors-and-attempts>

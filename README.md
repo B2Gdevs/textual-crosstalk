@@ -162,15 +162,55 @@ Pure-numpy 2-speaker classifier (user vs the specific TTS voice) used as a barge
 |---|---|---|
 | `SPEAKER_MARGIN_THRESHOLD` | `0.005` | minimum cosine-similarity margin to trust the classification. Below this, classifier returns "unknown" and barge is allowed. Raise for stricter gating, lower for more responsiveness. |
 
-### Upgrade path (when handcrafted features hit their ceiling)
+### Benchmarking — methodology and current numbers
 
-The pure-numpy classifier gets ~85-90% accuracy on a 2-speaker closed-set, which is enough to materially improve barge gating. Two upgrade tiers if it isn't:
+Run:
 
-**Tier 1 — ONNX speaker embedding (~30-50 MB total).** Convert a pretrained ECAPA-TDNN (SpeechBrain) or x-vector model to ONNX, ship the model file + `onnxruntime`. No torch dependency. ~256-dim learned embeddings replace the 29 handcrafted features. Expected accuracy: ~95-98% EER. Trade-off: ~50 MB on disk, ~10ms per inference on CPU.
+```
+python -m scripts.conduit_tui.benchmark
+```
 
-**Tier 2 — Distilled neural model (~5-15 MB).** Train (or fine-tune) a small CNN on mel-spectrograms for 2-class speaker discrimination. Quantize to int8. Could fit in <10 MB with minimal accuracy loss for the closed-set 2-speaker task. Most work; biggest payoff if Tier 1 still leaves gaps.
+The harness reports two things:
 
-The current implementation in `scripts/conduit_tui/speaker_id.py` keeps the same interface (`extract_features`, `SpeakerClassifier.classify`) that either tier would slot into — `extract_features` becomes the ONNX forward pass; everything downstream is unchanged.
+1. **Classifier accuracy** on a synthetic-voice corpus (formant-synth user vs formant-synth bot, 5 unseen clips each). Clean speech, plus a stress condition where each clip has the bot's voice mixed in at −10 dB to simulate AEC residual.
+2. **AEC ERLE** (echo return loss enhancement) in a pure-echo scenario, plus correlation against the user-only signal under simulated double-talk.
+
+Last measured (Tier 0 / pure-numpy + speexdsp / 2026-05-15):
+
+| Metric | Result | Notes |
+|---|---|---|
+| Classifier accuracy (clean synthetic) | **80%** | 8/10. Both errors are bot-clips classified as user. Synthetic sinusoidal voices are adversarial for MFCC — real human voice + ElevenLabs TTS have far richer spectra and should separate more cleanly. |
+| Classifier accuracy under +bot interferer | **80%** | unchanged under -10 dB additive bot interference |
+| Equal Error Rate (EER) | **20%** | single-threshold operating point on the synthetic corpus |
+| AEC ERLE (pure echo, synthetic) | **−3.2 dB** | post-convergence on a single-tone reference. Higher (better) on real broadband speech — the standalone pyaec smoke test on richer signals hit ~11.5 dB. |
+
+The synthetic test is the floor, not the ceiling — handcrafted features and adaptive filters both benefit from spectral diversity that pure sinusoids don't provide. If you want a real number for your environment, pass actual recordings via `--user user.wav --bot bot.wav` (16-bit mono, any rate). Drop a 10-30 second clip of each into the harness and you'll get an honest accuracy / EER for your conditions.
+
+### Why a smaller model can beat a bulkier one
+
+The 500 MB resemblyzer footprint is mostly PyTorch + CUDA bindings + auxiliary numerics libraries, not the speaker model itself. The actual model weights are usually 5-20 MB. Several real reasons a smaller system can be **better** for our problem:
+
+1. **Closed-set vs open-set.** ECAPA-TDNN (and friends) are trained to verify ANY two unseen speakers — pick 1 of 7000+ identities from a single 5-second clip. We have 2 known speakers, both enrolled. That's a fundamentally easier problem. A model with one-tenth the parameters can solve it.
+
+2. **Runtime swap.** Take the same trained ECAPA-TDNN, convert it to ONNX (~10 MB), run it with `onnxruntime` (~30 MB) instead of PyTorch (~400 MB). Same accuracy, ~5% the install size.
+
+3. **Quantization.** Float32 weights → int8 = 4x size reduction with single-digit accuracy loss for inference. ECAPA-TDNN-int8 fits in ~3 MB.
+
+4. **Knowledge distillation.** Train a small "student" model to mimic a large "teacher's" outputs. DistilHuBERT achieves ~95% of HuBERT-base's performance at half the size. The student inherits accuracy it didn't earn during training.
+
+5. **Architecture improvements.** Depthwise separable convolutions (MobileNet), squeeze-and-excitation blocks (the SE in ECAPA-SE-TDNN), conformer blocks. Often 10x smaller for the same accuracy as a 2017-era architecture.
+
+6. **Pretrained representations + a tiny head.** Take a frozen SSL model (wav2vec2, WavLM) producing speech embeddings, slap a 2-class linear classifier on top. The head is ~1 KB; the embedding model carries the cost only once.
+
+### Upgrade path
+
+| Tier | Backend | Size | Expected acc on real voice | Effort |
+|---|---|---|---|---|
+| **0 (shipped)** | pure-numpy 29-dim MFCC + ΔMFCC + F0 + centroid + ZCR | 0 MB extra | ~85-90% (literature; measured 80% on adversarial synthetic) | done |
+| **1** | ONNX-converted ECAPA-TDNN + `onnxruntime` | ~30-50 MB | ~95-98% EER | model conversion + ~50 lines wrapper code; same `extract_features` interface |
+| **2** | int8-quantized distilled CNN, task-specific 2-class head | ~5-15 MB | similar to Tier 1 for our closed-set | training pipeline; biggest payoff if Tier 1 still leaves gaps |
+
+The current implementation in `scripts/conduit_tui/speaker_id.py` keeps the same interface (`extract_features` → vector, `SpeakerClassifier.classify` → label/margin) that either tier slots into — `extract_features` becomes the ONNX forward pass; everything downstream is unchanged. The benchmark harness re-runs against the new backend and produces apples-to-apples numbers.
 
 **Common conversational fixes if a turn isn't working:**
 - *"Bot doesn't respond after I pause"* → lower `CROSSTALK_SETTLED_THRESHOLD_MS` or `CROSSTALK_MIN_WORDS`.

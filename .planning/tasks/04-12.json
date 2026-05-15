@@ -1,0 +1,31 @@
+{
+  "id": "04-12",
+  "phase": "04",
+  "status": "done",
+  "goal": "Build a benchmark harness for the speaker classifier + AEC and replace the unverified accuracy claims with measured numbers. scripts/conduit_tui/benchmark.py generates a small synthetic-voice corpus (formant-synth user vs formant-synth bot), enrols the classifier, measures (a) clean-speech accuracy, (b) accuracy with bot-as-interferer at -10dB, (c) Equal Error Rate over all clips, (d) AEC ERLE in pure-echo scenario, (e) correlation of cleaned mic vs user-only under double-talk. Also accepts real wav files via --user / --bot for environment-specific measurement. First run revealed: classifier 80% on synthetic (literature claim was 85-90%), AEC ERLE -3.2 dB on pure-sinusoid pathological input (vs 11.5 dB on broadband speech in earlier ad-hoc test). README updated with honest numbers + the synthetic-vs-real disclaimer.",
+  "type": "code",
+  "keywords": "",
+  "depends": [
+    "04-11"
+  ],
+  "commands": [],
+  "files": [
+    "scripts/conduit_tui/benchmark.py",
+    "scripts/conduit_tui/aec.py",
+    "README.md"
+  ],
+  "agent_id": "claude-opus-4-7",
+  "agent_role": "",
+  "runtime": "claude-code",
+  "model_profile": "",
+  "resolved_model": "",
+  "skill": "",
+  "claimed_by": "",
+  "claimed": false,
+  "claimed_at": "",
+  "lease_expires_at": "",
+  "completed_at": "",
+  "resolution": "",
+  "created_at": "2026-05-15T22:06:36.072Z",
+  "updated_at": "2026-05-15T22:06:36.602Z"
+}
