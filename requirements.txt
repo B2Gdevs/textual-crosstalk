@@ -1,0 +1,9 @@
+textual>=0.50
+textual-dev>=1.0
+sounddevice>=0.4.6
+deepgram-sdk>=3.7
+openai>=1.50
+elevenlabs>=1.0
+python-dotenv>=1.0
+numpy>=1.24,<2.0
+httpx>=0.25

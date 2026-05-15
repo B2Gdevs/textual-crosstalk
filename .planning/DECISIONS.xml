@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<decisions project="conduit-proj" schema="1">
+  <!-- <decision id="conduit-proj-001"><title>...</title><summary>...</summary><impact>...</impact></decision> -->
+
+  <decision id="CONDUIT-PROJ-D-001">
+    <title>Python 3.11+ as implementation language</title>
+    <date>2026-05-15</date>
+    <summary>Python 3.11+ chosen. Test mandates Python; 3.11 has best async perf + ergonomics for realtime audio. asyncio + dataclasses + type hints give clean structure. (source: test constraint)</summary>
+    <impact>All code ships as Python; venv-based isolation; pip deps only</impact>
+  </decision>
+
+  <decision id="CONDUIT-PROJ-D-002">
+    <title>Deepgram Python SDK + websocket streaming</title>
+    <date>2026-05-15</date>
+    <summary>Deepgram SDK v3+ with streaming websocket. Mandated by test. interim_results=True + punctuate=True give word-level timestamps with &lt;300ms latency. (source: test step 1)</summary>
+    <impact>Mic audio streams to Deepgram; word timestamps drive char interpolation</impact>
+  </decision>
+
+  <decision id="CONDUIT-PROJ-D-003">
+    <title>Groq as LLM provider (llama-3.1-8b-instant primary)</title>
+    <date>2026-05-15</date>
+    <summary>Groq chosen for LLM. Fastest first-token among Groq/Fireworks/Cerebras/OpenRouter (~200 tok/s). Primary model: llama-3.1-8b-instant. Fallback: llama-3.3-70b-versatile or Cerebras if rate-limited. (source: test step 4, operator choice)</summary>
+    <impact>LLM latency ~200-400ms; Groq SDK used</impact>
+  </decision>
+
+  <decision id="CONDUIT-PROJ-D-004">
+    <title>ElevenLabs streaming TTS with text_to_speech.with_timestamps</title>
+    <date>2026-05-15</date>
+    <summary>ElevenLabs chosen for TTS. text_to_speech.with_timestamps endpoint provides char-level timestamps natively, avoiding client-side derivation. Voice: Rachel or Adam (pre-made, no extra setup). (source: test step 5-6)</summary>
+    <impact>TTS char timestamps exact not interpolated; playback via sounddevice</impact>
+  </decision>
+
+  <decision id="CONDUIT-PROJ-D-005">
+    <title>sounddevice for mic capture and playback</title>
+    <date>2026-05-15</date>
+    <summary>sounddevice library for microphone capture and audio playback. Simpler than pyaudio on Windows, supports numpy buffers directly, less native-dep friction. (source: platform constraint + test step 1)</summary>
+    <impact>Mic capture and TTS playback both use sounddevice; numpy dependency</impact>
+  </decision>
+
+  <decision id="CONDUIT-PROJ-D-006">
+    <title>Single append-only JSONL data store for all chars</title>
+    <date>2026-05-15</date>
+    <summary>Unified char data store: Python list of dataclasses (char, start_time, end_time, notes) with JSONL persistence on each batch flush. Simple, debuggable, matches test schema exactly. notes field carries source tag (user|bot) and derivation method. (source: test steps 2+6)</summary>
+    <impact>Single file output; easy to inspect and evaluate; no DB dependency</impact>
+  </decision>
+
+  <decision id="CONDUIT-PROJ-D-007">
+    <title>Crosstalk strategy deferred until tarzain/crosstalk reviewed</title>
+    <date>2026-05-15</date>
+    <summary>Part 2 crosstalk implementation approach deferred until operator reads https://github.com/tarzain/crosstalk. Likely involves VAD + early-LLM-start + generation cancellation. Capture actual approach in follow-up decision after repo review. (source: test Part 2)</summary>
+    <impact>Phase 02 planning blocked on repo read; unblocked in ~15 min of study</impact>
+  </decision>
+
+  <decision id="CONDUIT-PROJ-D-008">
+    <title>Repo strategy: public GitHub repo shared by URL or collaborator</title>
+    <date>2026-05-15</date>
+    <summary>Create new public GitHub repo (B2Gdevs/conduit-proj or similar) at end of session. Share with RioPopper either by adding as collaborator via GitHub UI or making repo public and sharing URL. Decide at session end based on time remaining. (source: test deliverable)</summary>
+    <impact>No repo action before code is working; sharing is last step</impact>
+  </decision>
+
+  <decision id="CONDUIT-PROJ-D-009">
+    <title>Textual TUI as conduit_proj operator UI.</title>
+    <summary>Textual TUI as conduit_proj operator UI. Single Textual app wires audio capture loop + Deepgram streaming client + char-timeline store + LLM client + TTS client. Layout: left pane 'You said' (user live transcript), right pane 'LLM said' (bot response stream), bottom DataTable showing the char-timeline (char, start, end, notes) as it appends, status bar (mic level, Deepgram status, Groq latency, ElevenLabs status). Keeps everything in Python. Avoids web-frontend overhead. Deps: textual textual-dev watchfiles sounddevice deepgram-sdk groq elevenlabs python-dotenv numpy.</summary>
+  </decision>
+
+  <decision id="CONDUIT-PROJ-D-010">
+    <title>Reuse Textual patterns from ~/Documents/slm_learning/scri...</title>
+    <summary>Reuse Textual patterns from ~/Documents/slm_learning/scripts/learning_tui/ (17 modules, 2355 LOC). Highest-value: chat_screen.py (519 LOC, chat-first 2-panel layout with composer + output rail), local_speech.py (168 LOC, sounddevice mic capture directly portable to Deepgram websocket by swapping backend), app.py + app_banner.py (~70 LOC), visual_context.py (202 LOC, optional VCS dev mode Alt+I overlay), slash_commands.py (119 LOC, optional /reset /save /export). DO NOT copy verbatim — read patterns + reimplement against Deepgram+Groq+ElevenLabs stack. Cite slm_learning module names in inline comments.</summary>
+  </decision>
+
+  <decision id="CONDUIT-PROJ-D-011">
+    <title>Switch LLM provider from Groq → OpenRouter (operator dire...</title>
+    <summary>Switch LLM provider from Groq → OpenRouter (operator direction 2026-05-15). OpenRouter is OpenAI-compatible, routes to any provider (Groq/Anthropic/OpenAI/etc.) via 'provider/model' strings. Default model: meta-llama/llama-3.3-70b-instruct (balanced quality + speed). Client: openai Python SDK with base_url='https://openrouter.ai/api/v1' and OPENROUTER_API_KEY in Authorization. Per memory feedback_no_ai_sdk_use_openai_compatible.md NEVER use ai/@ai-sdk/* packages. Fallback chain: OpenRouter → OpenAI direct (key already copied from monorepo) → Groq (if key set). Supersedes CONDUIT-PROJ-D-003 which picked Groq as primary.</summary>
+  </decision>
+
+</decisions>

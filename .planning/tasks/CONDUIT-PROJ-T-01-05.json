@@ -1,0 +1,28 @@
+{
+  "id": "CONDUIT-PROJ-T-01-05",
+  "phase": "01",
+  "status": "planned",
+  "goal": "Unified char data store: CharEntry dataclass (char, start_time, end_time, notes), append-only in-memory list, flush_to_jsonl() that appends new entries to conversation.jsonl on each turn",
+  "type": "code",
+  "keywords": "",
+  "depends": [],
+  "commands": [],
+  "files": [
+    "conduit/store.py",
+    "conversation.jsonl"
+  ],
+  "agent_id": "",
+  "agent_role": "",
+  "runtime": "",
+  "model_profile": "",
+  "resolved_model": "",
+  "skill": "",
+  "claimed_by": "",
+  "claimed": false,
+  "claimed_at": "",
+  "lease_expires_at": "",
+  "completed_at": "",
+  "resolution": "",
+  "created_at": "2026-05-15T17:42:32.657Z",
+  "updated_at": "2026-05-15T17:42:32.657Z"
+}

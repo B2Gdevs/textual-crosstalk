@@ -1,0 +1,45 @@
+# Secrets — critical, NEVER commit
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+.gad/secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+.coverage
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Data + logs
+*.jsonl
+*.log
+.chars/
+recordings/
+data/
+output/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Audio scratch
+*.wav
+*.mp3
+*.opus
+*.webm

@@ -1,0 +1,27 @@
+{
+  "id": "CONDUIT-PROJ-T-01-04",
+  "phase": "01",
+  "status": "planned",
+  "goal": "ElevenLabs TTS with timestamps + playback: call text_to_speech.with_timestamps (or equivalent streaming endpoint) to get audio bytes + char-level timestamps; play via sounddevice; return char entries for data store",
+  "type": "code",
+  "keywords": "",
+  "depends": [],
+  "commands": [],
+  "files": [
+    "conduit/tts.py"
+  ],
+  "agent_id": "",
+  "agent_role": "",
+  "runtime": "",
+  "model_profile": "",
+  "resolved_model": "",
+  "skill": "",
+  "claimed_by": "",
+  "claimed": false,
+  "claimed_at": "",
+  "lease_expires_at": "",
+  "completed_at": "",
+  "resolution": "",
+  "created_at": "2026-05-15T17:42:26.399Z",
+  "updated_at": "2026-05-15T17:42:26.399Z"
+}

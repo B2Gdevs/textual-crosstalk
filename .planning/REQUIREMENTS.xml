@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<requirements project="conduit-proj" schema="1">
+  <!--
+    Requirements are the load-bearing source of intent for this project.
+    Every requirement carries provenance — the reason it exists, the
+    conversation / decision / user-need that put it there — so future
+    agents can trace WHY a feature shipped, not just WHAT shipped.
+    Added 2026-05-15 by claude-code from test brief verbatim. (gad requirements add not supported in v1.35.0)
+  -->
+
+  <requirement id="CONDUIT-PROJ-R-001" priority="must">
+    <title>Realtime mic audio capture</title>
+    <goal>Capture microphone input continuously as PCM frames suitable for Deepgram streaming. (source: test step 1 + Python audio constraint)</goal>
+    <provenance>
+      <source kind="external">Test brief step 1: User speaks → realtime transcription via Deepgram. Python mandated. sounddevice chosen per CONDUIT-PROJ-D-005.</source>
+      <link ref="CONDUIT-PROJ-D-005" />
+    </provenance>
+    <acceptance>
+      <criterion>sounddevice InputStream opens and delivers PCM buffers to Deepgram websocket without underrun.</criterion>
+    </acceptance>
+    <phases>
+      <phase ref="01" />
+    </phases>
+  </requirement>
+
+  <requirement id="CONDUIT-PROJ-R-002" priority="must">
+    <title>Realtime Deepgram transcription with &lt;300ms word-to-saved latency</title>
+    <goal>Stream mic audio to Deepgram's websocket API, receive word-level timestamps, write each word's chars to the unified data store within 300ms of utterance. (source: test step 1)</goal>
+    <provenance>
+      <source kind="external">Test brief step 1: latency target &lt;300ms from word-spoken to word-saved. Deepgram websocket + interim_results=True per CONDUIT-PROJ-D-002.</source>
+      <link ref="CONDUIT-PROJ-D-002" />
+    </provenance>
+    <acceptance>
+      <criterion>Words appear in data store within 300ms of being spoken (measured from Deepgram is_final callback timestamp).</criterion>
+      <criterion>Deepgram websocket uses interim_results=True and punctuate=True.</criterion>
+    </acceptance>
+    <phases>
+      <phase ref="01" />
+    </phases>
+  </requirement>
+
+  <requirement id="CONDUIT-PROJ-R-003" priority="must">
+    <title>Unified char-level data format (char, start_time, end_time, notes)</title>
+    <goal>Every char spoken by user OR heard from TTS lands in one append-only store with consistent schema: char, start_time, end_time, notes. (source: test steps 2 + 6)</goal>
+    <provenance>
+      <source kind="external">Test brief steps 2+6: data format char, start-time, end-time, notes/debug. One entry per char. "hello world" = 11 or 12 entries. Applies to both user speech and TTS output.</source>
+      <link ref="CONDUIT-PROJ-D-006" />
+    </provenance>
+    <acceptance>
+      <criterion>"hello world" produces exactly 11 entries (space is a char, count as needed per test spec — 12 if space included).</criterion>
+      <criterion>Each entry has char, start_time (float seconds), end_time (float seconds), notes (string).</criterion>
+      <criterion>User speech and bot TTS chars coexist in single JSONL file with source tag in notes.</criterion>
+    </acceptance>
+    <phases>
+      <phase ref="01" />
+    </phases>
+  </requirement>
+
+  <requirement id="CONDUIT-PROJ-R-004" priority="must">
+    <title>Char-level timestamp derivation via linear interpolation</title>
+    <goal>When API gives word-level times, interpolate evenly across chars (linear by char index). Document the method in notes column. (source: test step 3)</goal>
+    <provenance>
+      <source kind="external">Test brief step 3: Word start/end times from Deepgram; char-level timestamps estimated by interpolation across word duration.</source>
+    </provenance>
+    <acceptance>
+      <criterion>char_start = word_start + (char_idx / char_count) * word_duration for each char in word.</criterion>
+      <criterion>notes field says "interpolated" or "native" to distinguish derived from API-provided timestamps.</criterion>
+    </acceptance>
+    <phases>
+      <phase ref="01" />
+    </phases>
+  </requirement>
+
+  <requirement id="CONDUIT-PROJ-R-005" priority="must">
+    <title>LLM response generation via Groq</title>
+    <goal>Send transcribed user turn to LLM (Groq recommended for latency), receive text response ready for TTS. (source: test step 4)</goal>
+    <provenance>
+      <source kind="external">Test brief step 4: Transcription to LLM response. Operator choice: Groq/Fireworks/Cerebras/OpenRouter. Groq chosen per CONDUIT-PROJ-D-003.</source>
+      <link ref="CONDUIT-PROJ-D-003" />
+    </provenance>
+    <acceptance>
+      <criterion>Full user turn text sent to Groq API; non-empty response received.</criterion>
+      <criterion>LLM call completes in &lt;2s for typical conversational turns.</criterion>
+    </acceptance>
+    <phases>
+      <phase ref="01" />
+    </phases>
+  </requirement>
+
+  <requirement id="CONDUIT-PROJ-R-006" priority="must">
+    <title>ElevenLabs TTS with human voice and char-level timestamps</title>
+    <goal>Convert LLM response to audio + char-level timestamps; play audio for user; log bot chars in unified store. (source: test step 5)</goal>
+    <provenance>
+      <source kind="external">Test brief steps 5+6: LLM response to human-sounding TTS via ElevenLabs. Char-level timestamps of TTS output saved in same format. Per CONDUIT-PROJ-D-004.</source>
+      <link ref="CONDUIT-PROJ-D-004" />
+    </provenance>
+    <acceptance>
+      <criterion>ElevenLabs text_to_speech.with_timestamps returns char-level timestamps; these are stored in unified format.</criterion>
+      <criterion>Audio plays to user via sounddevice with no noticeable cut-off.</criterion>
+    </acceptance>
+    <phases>
+      <phase ref="01" />
+    </phases>
+  </requirement>
+
+  <requirement id="CONDUIT-PROJ-R-007" priority="must">
+    <title>End-to-end conversation loop</title>
+    <goal>Continuous conversation where user speaks, bot responds, user speaks again; all chars (spoken + heard) logged in single unified store across all turns. (source: test final-product paragraph)</goal>
+    <provenance>
+      <source kind="external">Test brief end state: program where user converses with LLM (human voice), all spoken+heard chars saved in unified format.</source>
+    </provenance>
+    <acceptance>
+      <criterion>Program runs indefinitely until Ctrl+C; each turn appends to the same JSONL file.</criterion>
+      <criterion>Bot chars have notes="bot,native" or "bot,interpolated"; user chars have notes="user,interpolated".</criterion>
+    </acceptance>
+    <phases>
+      <phase ref="01" />
+    </phases>
+  </requirement>
+
+  <requirement id="CONDUIT-PROJ-R-008" priority="must">
+    <title>Crosstalk for intelligent interruptions [Part 2]</title>
+    <goal>Implement tarzain/crosstalk logic so LLM begins generating before user finishes; cancel if user continues speaking; minimize cut-offs. (source: test Part 2)</goal>
+    <provenance>
+      <source kind="external">Test brief Part 2: implement crosstalk per https://github.com/tarzain/crosstalk. Familiarize with repo logic + impl. Integrate into Part 1. Per CONDUIT-PROJ-D-007.</source>
+      <link ref="CONDUIT-PROJ-D-007" />
+    </provenance>
+    <acceptance>
+      <criterion>LLM generation begins before user finishes speaking (speculative start).</criterion>
+      <criterion>If user continues speaking after speculative start threshold, generation is cancelled cleanly.</criterion>
+      <criterion>Existing char data format unchanged by crosstalk integration.</criterion>
+    </acceptance>
+    <phases>
+      <phase ref="02" />
+    </phases>
+  </requirement>
+
+</requirements>

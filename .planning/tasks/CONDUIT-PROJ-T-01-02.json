@@ -1,0 +1,28 @@
+{
+  "id": "CONDUIT-PROJ-T-01-02",
+  "phase": "01",
+  "status": "planned",
+  "goal": "Deepgram websocket streaming client: open mic with sounddevice, stream PCM to Deepgram interim_results+punctuate, receive word-level timestamps, run char-level linear interpolation helper (word_start + char_idx/char_count * word_duration per char)",
+  "type": "code",
+  "keywords": "",
+  "depends": [],
+  "commands": [],
+  "files": [
+    "conduit/stt.py",
+    "conduit/char_utils.py"
+  ],
+  "agent_id": "",
+  "agent_role": "",
+  "runtime": "",
+  "model_profile": "",
+  "resolved_model": "",
+  "skill": "",
+  "claimed_by": "",
+  "claimed": false,
+  "claimed_at": "",
+  "lease_expires_at": "",
+  "completed_at": "",
+  "resolution": "",
+  "created_at": "2026-05-15T17:42:21.893Z",
+  "updated_at": "2026-05-15T17:42:21.893Z"
+}

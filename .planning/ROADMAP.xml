@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<roadmap project="conduit-proj" schema="1">
+  <milestone id="v1" status="active">
+    <title>Conduit — Realtime Voice Conversation + Char Transcription</title>
+    <phase id="00" status="planned">
+      <title>Setup</title>
+      <goal>Python venv, env vars (Deepgram + Groq + ElevenLabs keys), package install (deepgram-sdk groq elevenlabs sounddevice python-dotenv), smoke-test each API individually with 3-line scripts.</goal>
+    </phase>
+    <phase id="01" status="planned">
+      <title>Part 1 — STT + LLM + TTS conversation loop</title>
+      <goal>Working end-to-end realtime conversation: user speaks → Deepgram transcribes with &lt;300ms latency → Groq LLM responds → ElevenLabs TTS plays audio. All chars (spoken + heard) logged in unified (char, start_time, end_time, notes) store, persisted to JSONL. Requirements: R-001 through R-007.</goal>
+      <depends>00</depends>
+    </phase>
+    <phase id="02" status="planned">
+      <title>Part 2 — Crosstalk intelligent interruption</title>
+      <goal>Implement tarzain/crosstalk logic: VAD-based interruption detection so LLM begins generating before user finishes speaking; cancel if user continues; minimize cut-offs. Study https://github.com/tarzain/crosstalk before implementing. Requirement: R-008.</goal>
+      <depends>01</depends>
+    </phase>
+    <phase id="03" status="planned">
+      <title>Ship</title>
+      <goal>GitHub repo created under operator account, RioPopper added as collaborator OR repo made public and URL shared. README written with usage + API key setup instructions.</goal>
+      <depends>01</depends>
+    </phase>
+  </milestone>
+</roadmap>
