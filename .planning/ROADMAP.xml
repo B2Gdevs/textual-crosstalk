@@ -32,4 +32,11 @@
     <depends></depends>
   </phase>
 
+  <phase id="05">
+    <title>Multi-speaker meeting: 2 bots + 1 human with polite turn-taking</title>
+    <goal>Extend the single-bot conversation pipeline to a simulated 3-speaker meeting with two distinct bot personas (different ELEVENLABS_VOICE_IDs, different system prompts) plus the human. Bots must NOT cut each other off; only humans can barge bots. Turn-taking dispatcher decides who speaks next given the running transcript. Speaker classifier identifies which of the three voices the current mic audio belongs to (extending the existing N-speaker SpeakerClassifier). Each bot's TTS audio flows through the same AEC reference stream. Shared transcript visible to both bot personas. Latency budget: total round-trip per bot turn under 2.5s including LLM + TTS first audio.</goal>
+    <status>planned</status>
+    <depends>04</depends>
+  </phase>
+
 </roadmap>

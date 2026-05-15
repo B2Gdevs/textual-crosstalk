@@ -162,6 +162,29 @@ Pure-numpy 2-speaker classifier (user vs the specific TTS voice) used as a barge
 |---|---|---|
 | `SPEAKER_MARGIN_THRESHOLD` | `0.005` | minimum cosine-similarity margin to trust the classification. Below this, classifier returns "unknown" and barge is allowed. Raise for stricter gating, lower for more responsiveness. |
 
+### Scoped vs general benchmark — where we stand
+
+Two distinct accuracy regimes apply to speaker classifiers:
+
+| | **Open-set verification** | **Closed-set classification (ours)** |
+|---|---|---|
+| Task | Pick "same speaker?" yes/no from arbitrary pairs, neither speaker seen during training | Pick 1 of N enrolled speakers, all enrolled at runtime |
+| Public benchmark | VoxCeleb-O (~37K trial pairs, ~7K identities) | none — every conversational system has its own corpus |
+| Reference scores | ECAPA-TDNN ~0.86% EER, Resemblyzer ~5-6% EER, classical MFCC+GMM ~10-15% EER | (only meaningful for the specific scoped use case) |
+| Difficulty | hard — model must generalize to unseen voices | much easier — both voices are enrolled |
+
+Our pipeline solves the closed-set conversational case. The synthetic-corpus benchmark above measures that. To know where we stand on the **general** task — what the literature numbers describe — run:
+
+```
+python -m scripts.conduit_tui.benchmark \
+    --pairs path/to/voxceleb_test_pairs.txt \
+    --wav-dir path/to/voxceleb_wavs/
+```
+
+VoxCeleb test pairs require free registration at https://www.robots.ox.ac.uk/~vgg/data/voxceleb/ (no auto-download). The harness reports EER and prints the reference scores from ECAPA-TDNN / Resemblyzer / classical MFCC-GMM so you can see the gap immediately. Expect our 29-dim handcrafted features to land in the ~15-25% EER range on open-set — well behind learned embeddings, but irrelevant to our actual gated-barge use case because we're solving the easier problem.
+
+The point of running it: when we upgrade to Tier 1 (ONNX ECAPA-TDNN), the same harness re-runs and shows the EER drop AND the closed-set accuracy delta side by side. No more handwaving.
+
 ### Benchmarking — methodology and current numbers
 
 Run:
@@ -183,6 +206,8 @@ Last measured (Tier 0 / pure-numpy + speexdsp / 2026-05-15):
 | Classifier accuracy under +bot interferer | **80%** | unchanged under -10 dB additive bot interference |
 | Equal Error Rate (EER) | **20%** | single-threshold operating point on the synthetic corpus |
 | AEC ERLE (pure echo, synthetic) | **−3.2 dB** | post-convergence on a single-tone reference. Higher (better) on real broadband speech — the standalone pyaec smoke test on richer signals hit ~11.5 dB. |
+| Classifier latency | **5.36 ms** per call (500ms clip, CPU) | invoked once per Deepgram partial (~5×/sec) — negligible |
+| AEC latency | **2.80 ms** per 1024-sample chunk (= 64ms audio) | 4.4% of real-time → ample headroom for STT/LLM/TTS network calls |
 
 The synthetic test is the floor, not the ceiling — handcrafted features and adaptive filters both benefit from spectral diversity that pure sinusoids don't provide. If you want a real number for your environment, pass actual recordings via `--user user.wav --bot bot.wav` (16-bit mono, any rate). Drop a 10-30 second clip of each into the harness and you'll get an honest accuracy / EER for your conditions.
 

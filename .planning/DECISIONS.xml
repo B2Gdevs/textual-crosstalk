@@ -170,4 +170,16 @@
     </references>
   </decision>
 
+  <decision id="CONDUIT-PROJ-D-021">
+    <title>Two-axis benchmarking: scoped (closed-set) accuracy + general (open-set VoxCeleb EER); N-speaker classifier as foundation for meeting mode</title>
+    <date>2026-05-15</date>
+    <summary>We are evaluated on a different problem than the public benchmarks. Public papers report VoxCeleb-O EER — open-set verification across ~7000 unseen identities. We solve closed-set classification across 2-N enrolled speakers, all known at runtime. Different difficulty, different number. Decision: report BOTH axes so the gap is visible. The scoped synthetic benchmark (5 user + 5 bot synthetic clips) measures what our pipeline actually does. The open-set mode (benchmark_open_set_pairs, VoxCeleb-O compatible) measures what the literature reports. When we upgrade Tier 0 to Tier 1 (ONNX ECAPA-TDNN), both metrics improve and the deltas are recorded apples-to-apples. Latency budget: classifier 5.36ms per call, AEC 2.80ms per 64ms-of-audio chunk — both well under real-time. Total local audio-pipeline overhead well below 10ms, leaving the conversational latency budget dominated by network LLM+TTS calls where it should be. N-speaker classifier (enrol(label, samples), score_all()) ships now as foundation for phase 05 (3-speaker meeting). Backwards-compatible with the 2-speaker callers via the legacy enrol_user/enrol_bot API.</summary>
+    <impact>External reviewers / next-tier upgrades can compare against the same benchmark and the same reference points. The N-speaker refactor is structural plumbing for phase 05's 2-bot + 1-human meeting mode — no orchestrator changes yet, just the classifier surface ready for it. Latency measurements confirm we have headroom for real-time multi-speaker scenarios without compromising local pipeline jitter.</impact>
+    <references>
+      <file path="scripts/conduit_tui/speaker_id.py"/>
+      <file path="scripts/conduit_tui/benchmark.py"/>
+      <file path="README.md"/>
+    </references>
+  </decision>
+
 </decisions>

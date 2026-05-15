@@ -1,0 +1,31 @@
+{
+  "id": "04-13",
+  "phase": "04",
+  "status": "done",
+  "goal": "Open-set verification benchmark mode + N-speaker classifier refactor. (1) SpeakerClassifier refactored from binary user/bot to N-speaker — argmax cosine across N enrolled templates. Backwards-compatible enrol_user/enrol_bot API; new enrol(label,samples) for arbitrary speakers. score_all() returns full similarity dict for downstream turn-taking. (2) benchmark.py adds benchmark_open_set_pairs(pairs_file, wav_dir) — VoxCeleb-O compatible trial format. Reports EER and prints reference scores (ECAPA-TDNN ~0.86%, Resemblyzer ~5-6%, MFCC+GMM ~10-15%) so user can see the gap immediately on running it. (3) benchmark_latency() measures per-call CPU time for classifier and AEC — measured 5.36ms classify and 2.80ms per 64ms-of-audio AEC chunk. (4) README adds 'Scoped vs general benchmark' section explaining open-set vs closed-set.",
+  "type": "code",
+  "keywords": "",
+  "depends": [
+    "04-12"
+  ],
+  "commands": [],
+  "files": [
+    "scripts/conduit_tui/speaker_id.py",
+    "scripts/conduit_tui/benchmark.py",
+    "README.md"
+  ],
+  "agent_id": "claude-opus-4-7",
+  "agent_role": "",
+  "runtime": "claude-code",
+  "model_profile": "",
+  "resolved_model": "",
+  "skill": "",
+  "claimed_by": "",
+  "claimed": false,
+  "claimed_at": "",
+  "lease_expires_at": "",
+  "completed_at": "",
+  "resolution": "",
+  "created_at": "2026-05-15T22:19:20.797Z",
+  "updated_at": "2026-05-15T22:19:21.406Z"
+}

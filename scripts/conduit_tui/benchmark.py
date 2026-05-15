@@ -326,15 +326,149 @@ def benchmark_aec() -> None:
               "(closer to 1.0 = bot well removed, user preserved)")
 
 
+def benchmark_open_set_pairs(pairs_path: Path, wav_dir: Path) -> None:
+    """Open-set verification benchmark on a VoxCeleb-style pairs file.
+
+    Each line of `pairs_path` is "<label> <wav_a> <wav_b>" where label
+    is 1 (same speaker) or 0 (different speakers). wav files live
+    under `wav_dir`. Reports Equal Error Rate (EER) and the
+    distribution of cosine similarities for same- vs different-speaker
+    pairs.
+
+    This is the metric the public benchmarks report — open-set means
+    speakers in the test pairs were NOT seen during model training. Our
+    handcrafted-feature classifier wasn't trained on anything, so this
+    measures how generalizable the 29-dim feature space is across
+    arbitrary speakers — a strictly harder task than our scoped 2-speaker
+    closed-set conversation use case.
+
+    Format expected (VoxCeleb-O compatible):
+        1 id10001/abc/00001.wav id10001/abc/00002.wav
+        0 id10001/abc/00001.wav id10999/xyz/00001.wav
+    """
+    print(f"\n=== Open-Set Verification (VoxCeleb-style pairs) ===")
+    print(f"pairs: {pairs_path}")
+    print(f"wav_dir: {wav_dir}")
+    if not pairs_path.exists():
+        print("[skip] pairs file not found")
+        return
+    if not wav_dir.exists():
+        print("[skip] wav_dir not found")
+        return
+
+    pairs: list[tuple[int, Path, Path]] = []
+    with pairs_path.open() as fh:
+        for line in fh:
+            parts = line.strip().split()
+            if len(parts) != 3:
+                continue
+            label, a, b = parts
+            pairs.append((int(label), wav_dir / a, wav_dir / b))
+    print(f"loaded {len(pairs)} pairs")
+    if not pairs:
+        return
+
+    same_scores: list[float] = []
+    diff_scores: list[float] = []
+    skipped = 0
+    for i, (label, a, b) in enumerate(pairs):
+        try:
+            wa = _load_wav_int16(a)
+            wb = _load_wav_int16(b)
+        except Exception:
+            skipped += 1
+            continue
+        fa = extract_features(wa)
+        fb = extract_features(wb)
+        if fa is None or fb is None:
+            skipped += 1
+            continue
+        sim = float(np.dot(_l2_normalize(fa), _l2_normalize(fb)))
+        (same_scores if label == 1 else diff_scores).append(sim)
+        if (i + 1) % 200 == 0:
+            print(f"  processed {i + 1}/{len(pairs)} pairs")
+    print(f"scored: same={len(same_scores)} diff={len(diff_scores)} skipped={skipped}")
+
+    if same_scores and diff_scores:
+        eer = _equal_error_rate(same_scores, [-s for s in diff_scores])
+        print(f"[open-set] EER: {eer * 100:.2f}%")
+        print(f"  same-speaker cos sim: mean={np.mean(same_scores):.3f} std={np.std(same_scores):.3f}")
+        print(f"  diff-speaker cos sim: mean={np.mean(diff_scores):.3f} std={np.std(diff_scores):.3f}")
+        print("  Reference points (lower = better):")
+        print("    ECAPA-TDNN (SpeechBrain, 2020):   ~0.86% EER on VoxCeleb-O")
+        print("    Resemblyzer (Resemble AI, 2018):  ~5-6% EER")
+        print("    Classical MFCC + UBM-GMM (2010):  ~10-15% EER")
+
+
+def _l2_normalize(v: np.ndarray) -> np.ndarray:
+    n = float(np.linalg.norm(v))
+    return v / n if n > 1e-10 else v
+
+
+def benchmark_latency() -> None:
+    """Measure per-call CPU time for the speaker classifier and AEC.
+
+    Latency budget for a conversational turn is dominated by network
+    LLM and TTS — but the local audio pipeline must stay under ~10ms
+    per mic chunk to not introduce jitter into Deepgram's STT path.
+    These measurements verify that.
+    """
+    import time
+    print("\n=== Latency ===")
+
+    # Classifier latency
+    user_enrol, bot_enrol, _ = _build_synth_corpus()
+    clf = SpeakerClassifier(sample_rate=SR)
+    clf.reset_user()
+    clf.enrol_user(user_enrol, persist=False)
+    clf.enrol_bot(bot_enrol)
+
+    test = user_enrol[: SR // 2]  # 500ms clip
+    n = 200
+    t0 = time.perf_counter()
+    for _ in range(n):
+        clf.classify(test)
+    t1 = time.perf_counter()
+    per_call_ms = (t1 - t0) / n * 1000
+    print(f"[classifier] {per_call_ms:.2f} ms per classify (500ms clip)")
+
+    # AEC latency — per-chunk processing
+    aec = make_echo_canceller(mic_rate=SR)
+    ref = bot_enrol
+    aec.push_reference(ref, src_rate=SR)
+    chunk = np.zeros(1024, dtype=np.int16)
+    # Build mic backlog so AEC actually processes (not just passthrough)
+    mic = ref[:8192]
+    t0 = time.perf_counter()
+    for i in range(0, mic.size - 1024, 1024):
+        aec.process(mic[i:i + 1024])
+    t1 = time.perf_counter()
+    if (mic.size // 1024) > 0:
+        per_chunk_ms = (t1 - t0) / (mic.size // 1024) * 1000
+        print(f"[aec] {per_chunk_ms:.2f} ms per 1024-sample (64ms) chunk")
+    # Wall-clock budget reference
+    print("  Wall-clock budget per mic chunk @ 16kHz, 1024 samples = 64ms.")
+    print("  Anything under ~10ms leaves ample headroom for STT / LLM / TTS network calls.")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Speaker / AEC benchmarks")
     parser.add_argument("--user", type=Path, help="optional user wav (16k mono) for enrollment")
     parser.add_argument("--bot", type=Path, help="optional bot wav (16k mono) for enrollment")
+    parser.add_argument("--pairs", type=Path, help="VoxCeleb-style trials file (label wav_a wav_b)")
+    parser.add_argument("--wav-dir", type=Path, help="root directory for wav files referenced by --pairs")
     parser.add_argument("--quiet", action="store_true")
     args = parser.parse_args()
 
     benchmark_classifier(verbose=not args.quiet)
     benchmark_aec()
+    benchmark_latency()
+    if args.pairs and args.wav_dir:
+        benchmark_open_set_pairs(args.pairs, args.wav_dir)
+    else:
+        print("\n[open-set] Skipped — pass --pairs <file> --wav-dir <dir> to compare against")
+        print("           VoxCeleb-style benchmarks (the metric public papers report).")
+        print("           See README 'Scoped vs general benchmark' for how to obtain the dataset.")
     return 0
 
 

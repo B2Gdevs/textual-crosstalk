@@ -230,50 +230,68 @@ def _l2_normalize(v: np.ndarray) -> np.ndarray:
 
 
 class SpeakerClassifier:
-    """Two-speaker classifier (enrolled user vs enrolled bot)."""
+    """N-speaker classifier with cached user template.
+
+    Designed to scale from the current 2-speaker (user + bot) case to
+    the multi-speaker meeting case (user + bot1 + bot2 + ...) without
+    architectural changes — argmax cosine similarity across N templates.
+
+    For 2-speaker callers, the legacy enrol_user / enrol_bot API still
+    works and maps internally to enrol('user') and enrol('bot').
+    """
 
     def __init__(self, sample_rate: int = _SAMPLE_RATE) -> None:
         self.sr = sample_rate
-        self._user_template: np.ndarray | None = None
-        self._bot_template: np.ndarray | None = None
+        self._templates: dict[str, np.ndarray] = {}
         self._load_cached_user()
+
+    # Properties --------------------------------------------------------
 
     @property
     def enrolled(self) -> bool:
-        return self._user_template is not None and self._bot_template is not None
+        """Legacy 2-speaker check — both user and bot present."""
+        return "user" in self._templates and "bot" in self._templates
 
     @property
     def user_enrolled(self) -> bool:
-        return self._user_template is not None
+        return "user" in self._templates
 
     @property
     def bot_enrolled(self) -> bool:
-        return self._bot_template is not None
+        return "bot" in self._templates
 
-    # Enrollment ---------------------------------------------------------
+    @property
+    def speakers(self) -> list[str]:
+        return list(self._templates.keys())
+
+    # Enrollment --------------------------------------------------------
+
+    def enrol(self, label: str, samples_int16: np.ndarray) -> bool:
+        """Enrol any named speaker — 'user', 'bot', 'bot1', 'bot2', ..."""
+        feat = extract_features(samples_int16)
+        if feat is None:
+            return False
+        self._templates[label] = _l2_normalize(feat)
+        return True
 
     def enrol_user(self, samples_int16: np.ndarray, persist: bool = True) -> bool:
-        feat = extract_features(samples_int16)
-        if feat is None:
-            return False
-        self._user_template = _l2_normalize(feat)
-        if persist:
+        ok = self.enrol("user", samples_int16)
+        if ok and persist:
             try:
                 _USER_TEMPLATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-                np.save(_USER_TEMPLATE_PATH, self._user_template)
+                np.save(_USER_TEMPLATE_PATH, self._templates["user"])
             except Exception as exc:
                 print(f"[speaker_id] persist failed: {exc}")
-        return True
+        return ok
 
     def enrol_bot(self, samples_int16: np.ndarray) -> bool:
-        feat = extract_features(samples_int16)
-        if feat is None:
-            return False
-        self._bot_template = _l2_normalize(feat)
-        return True
+        return self.enrol("bot", samples_int16)
+
+    def remove(self, label: str) -> None:
+        self._templates.pop(label, None)
 
     def reset_user(self) -> None:
-        self._user_template = None
+        self.remove("user")
         try:
             if _USER_TEMPLATE_PATH.exists():
                 _USER_TEMPLATE_PATH.unlink()
@@ -286,24 +304,36 @@ class SpeakerClassifier:
         try:
             tpl = np.load(_USER_TEMPLATE_PATH)
             if tpl.shape == (29,):
-                self._user_template = tpl.astype(np.float32)
+                self._templates["user"] = tpl.astype(np.float32)
         except Exception as exc:
             print(f"[speaker_id] cache load failed: {exc}")
 
     # Inference ---------------------------------------------------------
 
     def classify(self, samples_int16: np.ndarray) -> tuple[str, float]:
-        """Returns (label, margin). label is 'user' | 'bot' | 'unknown'.
-        margin is cosine_sim_to_winner - cosine_sim_to_other; higher = more confident.
+        """N-way classify. Returns (label, margin). margin is
+        sim_to_winner - sim_to_runner_up; higher = more confident.
+        Returns ('unknown', 0.0) when no templates are enrolled or the
+        clip is too short to feature-extract.
         """
-        if self._user_template is None or self._bot_template is None:
+        if len(self._templates) < 2:
             return ("unknown", 0.0)
         feat = extract_features(samples_int16)
         if feat is None:
             return ("unknown", 0.0)
         fn = _l2_normalize(feat)
-        user_sim = float(np.dot(fn, self._user_template))
-        bot_sim = float(np.dot(fn, self._bot_template))
-        if user_sim >= bot_sim:
-            return ("user", user_sim - bot_sim)
-        return ("bot", bot_sim - user_sim)
+        scored = [(label, float(np.dot(fn, tpl))) for label, tpl in self._templates.items()]
+        scored.sort(key=lambda x: x[1], reverse=True)
+        winner_label, winner_sim = scored[0]
+        runner_sim = scored[1][1] if len(scored) > 1 else 0.0
+        return (winner_label, winner_sim - runner_sim)
+
+    def score_all(self, samples_int16: np.ndarray) -> dict[str, float]:
+        """Full cosine similarity to every enrolled template. Useful
+        when you need raw scores for downstream decisions (turn-taking
+        priority in a meeting, confidence display, etc.)."""
+        feat = extract_features(samples_int16)
+        if feat is None:
+            return {label: 0.0 for label in self._templates}
+        fn = _l2_normalize(feat)
+        return {label: float(np.dot(fn, tpl)) for label, tpl in self._templates.items()}
