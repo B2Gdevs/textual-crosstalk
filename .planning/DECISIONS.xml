@@ -182,4 +182,17 @@
     </references>
   </decision>
 
+  <decision id="CONDUIT-PROJ-D-022">
+    <title>Real ElevenLabs corpus + scenario rotation + raw operator capture as benchmark foundation; first project skill captures phase 04's most expensive lesson</title>
+    <date>2026-05-15</date>
+    <summary>Three structural moves on the test-infrastructure axis. (1) Generate and persist a real ElevenLabs voice corpus (5 voices x 30 phrases = 150 clips, 33 MB, ~395 s total audio) instead of relying on synthetic formant-synth voices that under-represent real-speech spectral diversity. data/dataset/manifest.json is the single source of truth for benchmark + meeting-mode voice pools. (2) Scenario rotation — setup.ps1 launches the next scenario in {1v1, 1v2, 1v3} per run; state at ~/.conduit/state.json; CONDUIT_SCENARIO env one-shot override. Gets us continuous exposure to all configurations without manual switching. (3) Persist raw operator audio per session at data/dataset/user/&lt;iso_timestamp&gt;.wav so future feature-tier upgrades (Tier 1 ONNX, Tier 2 distilled) can re-extract features from the same audio without re-enrollment. (4) First project skill aec-before-text-echo-guards committed to .claude/skills/ — the most expensive lesson of phase 04 (three failed text-layer fixes before reaching AEC) captured for future agents.</summary>
+    <impact>Removes the synthetic-only ceiling on benchmark accuracy. Sets up the multi-bot meeting (phase 05) to land cleanly because dataset and voice pool are already in place. Operator capture means we never lose enrollment data on tier upgrades. Skill makes the phase-04 lessons survive context resets.</impact>
+    <references>
+      <file path="scripts/conduit_tui/dataset_gen.py"/>
+      <file path="scripts/conduit_tui/scenarios.py"/>
+      <file path="scripts/conduit_tui/operator_capture.py"/>
+      <file path=".claude/skills/aec-before-text-echo-guards/SKILL.md"/>
+    </references>
+  </decision>
+
 </decisions>

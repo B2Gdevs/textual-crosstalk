@@ -31,6 +31,7 @@ from .deepgram_client import DeepgramStream
 from .llm_client import LLMClient
 from .mic_capture import MicStream
 from .orchestrator import ConversationLoop
+from .scenarios import next_scenario
 from .status import StatusBar
 from .tts_client import ElevenLabsClient
 
@@ -114,6 +115,11 @@ class ConversationScreen(Screen):
         """Initialize all clients and run the conversation loop."""
         status = self.query_one("#status_bar", StatusBar)
 
+        # Pick the next scenario in the rotation and announce it.
+        scenario = next_scenario()
+        primary_voice_id = scenario.bot_voices[0][0] if scenario.bot_voices else None
+        self._announce_scenario(scenario)
+
         try:
             dg_key = os.environ["DEEPGRAM_API_KEY"]
             or_key = os.environ.get("OPENROUTER_API_KEY")
@@ -122,7 +128,12 @@ class ConversationScreen(Screen):
             groq_model = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
             openai_key = os.environ.get("OPENAI_API_KEY")
             el_key = os.environ.get("ELEVENLABS_API_KEY")
-            el_voice = os.environ.get("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
+            # Scenario voice trumps the env default in 1v1 mode (and
+            # picks the first bot for the multi-bot scenarios — Phase 05
+            # will use the full bot_voices list).
+            el_voice = primary_voice_id or os.environ.get(
+                "ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL"
+            )
             sample_rate = int(os.environ.get("CONDUIT_SAMPLE_RATE", "16000"))
             char_log = os.environ.get("CONDUIT_CHAR_LOG", "./data/chars.jsonl")
         except KeyError as exc:
@@ -233,6 +244,15 @@ class ConversationScreen(Screen):
         log = self.query_one("#user_log", RichLog)
         log.write(f"[#C92A2A][ERROR] {msg}[/#C92A2A]")
 
+    def _announce_scenario(self, scenario) -> None:
+        """Surface the current scenario in the bot log so the operator
+        knows which configuration is running. Subsequent runs auto-
+        advance; CONDUIT_SCENARIO=1v2 overrides for one run."""
+        log = self.query_one("#bot_log", RichLog)
+        names = ", ".join(name for _, name in scenario.bot_voices)
+        log.write(f"[#D4A017][scenario {scenario.id}] {scenario.label}[/#D4A017]")
+        log.write(f"[dim]bots: {names}[/dim]")
+
     # ------------------------------------------------------------------
     # Key actions
 
@@ -248,6 +268,8 @@ class ConversationScreen(Screen):
         status.set_tts("stopped")
 
     def action_quit(self) -> None:
+        if self._convo_loop:
+            self._convo_loop.finalize_session()
         if self._loop_task:
             self._loop_task.cancel()
         self.app.exit()

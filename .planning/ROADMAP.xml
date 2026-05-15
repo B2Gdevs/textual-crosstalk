@@ -39,4 +39,11 @@
     <depends>04</depends>
   </phase>
 
+  <phase id="06">
+    <title>Real-data evaluation, scenario rotation, operator-voice persistence, GAD evolution</title>
+    <goal>Replace synthetic-only benchmarks with a real ElevenLabs voice corpus, persist operator voice recordings per session, rotate test scenarios (1v1 → 1v2 → 1v3 → repeat) on each setup launch, and run the GAD evolution analysis on phase 04 to surface candidate project skills. Closes the gap between 'we have a benchmark harness' and 'we know our actual numbers on actual voices, including a comparison line to VoxCeleb-O reference scores'. Foundation work for phase 05 (multi-speaker meeting) — the dataset and scenario plumbing land first so the meeting mode lights up cleanly when 05 starts.</goal>
+    <status>in-progress</status>
+    <depends>04</depends>
+  </phase>
+
 </roadmap>

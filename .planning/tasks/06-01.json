@@ -1,0 +1,30 @@
+{
+  "id": "06-01",
+  "phase": "06",
+  "status": "done",
+  "goal": "Generate real ElevenLabs voice corpus. scripts/conduit_tui/dataset_gen.py iterates 5 premade voices (Sarah, Roger, Laura, Charlie, George) x 30 conversational phrases through ElevenLabs convert_with_timestamps (eleven_flash_v2_5, mp3_44100_128 — free-tier compatible), decodes mp3 to int16 PCM via miniaudio, and writes wav files at data/dataset/voices/<voice_id>/<index>.wav plus a manifest.json. Idempotent — skips existing non-empty wavs on re-run. Generated 150 clips (33.2 MB, ~395s total audio) in 41s with 0 errors. data/dataset/ added to .gitignore (billable artifacts).",
+  "type": "code",
+  "keywords": "",
+  "depends": [
+    "04-13"
+  ],
+  "commands": [],
+  "files": [
+    "scripts/conduit_tui/dataset_gen.py",
+    ".gitignore"
+  ],
+  "agent_id": "claude-opus-4-7",
+  "agent_role": "",
+  "runtime": "claude-code",
+  "model_profile": "",
+  "resolved_model": "",
+  "skill": "",
+  "claimed_by": "",
+  "claimed": false,
+  "claimed_at": "",
+  "lease_expires_at": "",
+  "completed_at": "",
+  "resolution": "",
+  "created_at": "2026-05-15T22:46:31.449Z",
+  "updated_at": "2026-05-15T22:46:32.073Z"
+}

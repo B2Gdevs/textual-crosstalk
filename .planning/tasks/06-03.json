@@ -1,0 +1,31 @@
+{
+  "id": "06-03",
+  "phase": "06",
+  "status": "done",
+  "goal": "Persist raw operator audio per session for future feature-tier re-extraction. scripts/conduit_tui/operator_capture.py buffers AEC-cleaned mic chunks in memory and flushes to data/dataset/user/<iso_timestamp>.wav at session finalize. Wired into orchestrator._mic_pump (.append on every cleaned chunk) and conversation_screen.action_quit (.finalize on exit). Preserves raw 16kHz mono int16 PCM so Tier 1 (ONNX) and Tier 2 (distilled CNN) re-enrollment can extract their own features from the same audio without asking the operator to re-record.",
+  "type": "code",
+  "keywords": "",
+  "depends": [
+    "06-02"
+  ],
+  "commands": [],
+  "files": [
+    "scripts/conduit_tui/operator_capture.py",
+    "scripts/conduit_tui/orchestrator.py",
+    "scripts/conduit_tui/conversation_screen.py"
+  ],
+  "agent_id": "claude-opus-4-7",
+  "agent_role": "",
+  "runtime": "claude-code",
+  "model_profile": "",
+  "resolved_model": "",
+  "skill": "",
+  "claimed_by": "",
+  "claimed": false,
+  "claimed_at": "",
+  "lease_expires_at": "",
+  "completed_at": "",
+  "resolution": "",
+  "created_at": "2026-05-15T22:46:40.218Z",
+  "updated_at": "2026-05-15T22:46:40.820Z"
+}

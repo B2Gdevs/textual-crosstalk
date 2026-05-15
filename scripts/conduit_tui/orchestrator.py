@@ -38,6 +38,7 @@ from .crosstalk import Crosstalk
 from .deepgram_client import DeepgramStream
 from .llm_client import LLMClient
 from .mic_capture import MicStream
+from .operator_capture import OperatorCapture
 from .speaker_id import SpeakerClassifier
 from .tts_client import ElevenLabsClient
 
@@ -121,6 +122,9 @@ class ConversationLoop:
         # the AEC didn't fully suppress), the barge is dropped. See
         # scripts/conduit_tui/speaker_id.py.
         self._spk = SpeakerClassifier(sample_rate=sample_rate)
+        # Persist raw operator audio per session for re-extraction on
+        # future feature-tier upgrades. See operator_capture.py.
+        self._capture = OperatorCapture(sample_rate=sample_rate)
         # Rolling 1.5s ring buffer of AEC-cleaned mic audio, so we can
         # classify the speech that produced any given Deepgram event.
         self._mic_ring_size = int(sample_rate * 1.5)
@@ -188,6 +192,15 @@ class ConversationLoop:
     async def stop(self) -> None:
         self._running = False
         self._stop_event.set()
+        self.finalize_session()
+
+    def finalize_session(self) -> None:
+        """Called at clean shutdown — flushes the operator's session
+        audio to disk. Safe to call multiple times."""
+        path = self._capture.finalize()
+        if path is not None:
+            print(f"[orchestrator] operator session audio saved: {path} "
+                  f"({self._capture.seconds_captured:.1f}s)")
 
     # ------------------------------------------------------------------
     # Mic → Deepgram pump
@@ -207,6 +220,8 @@ class ConversationLoop:
                     self._mic_ring = np.concatenate([self._mic_ring, cleaned])
                     if self._mic_ring.size > self._mic_ring_size:
                         self._mic_ring = self._mic_ring[-self._mic_ring_size:]
+                    # Persist for cross-session re-enrollment / benchmarks.
+                    self._capture.append(cleaned)
                     await self._dg.send(cleaned.tobytes())
             except asyncio.TimeoutError:
                 continue

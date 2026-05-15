@@ -29,6 +29,7 @@ build/
 .chars/
 recordings/
 data/
+data/dataset/
 output/
 
 # IDE
