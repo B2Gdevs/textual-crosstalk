@@ -114,19 +114,6 @@ Fragments under 3 words (e.g. "um", "yeah") are never speculated on — avoids w
 Implementation: `scripts/conduit_tui/crosstalk.py` (coordinator) + `scripts/conduit_tui/orchestrator.py` (wiring).
 Reference: https://github.com/tarzain/crosstalk (commit 327b2da).
 
-## Submission note
+## Author
 
-> Completed the challenge and it was a lot of fun. Had some fun moments
-> with the two-way interruption and how chaotic it can get.
->
-> Fun video where the agents went off during the showcase:
-> https://www.loom.com/share/7e5b47ec7862425cacc0c174c75d04b5
->
-> And just my wrap up:
-> https://www.loom.com/share/33ba9b07cb694564aa2c8065b33cc3eb
->
-> Respectfully sent,
-> Benjamin Garrard
-
-Repo: https://github.com/B2Gdevs/textual-crosstalk
-Shared with GitHub user **RioPopper**.
+Benjamin Garrard — https://github.com/B2Gdevs

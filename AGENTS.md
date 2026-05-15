@@ -3,12 +3,8 @@
 Project name: `conduit_proj`
 Project id: `conduit-proj`
 
-## Soul pointer
-
-Read `SOUL.md` first, then read the soul body it points to under
-`narrative/souls/` when present. Gilgamesh of Uruk is the default setup soul.
-Projects can override that by updating `SOUL.md` with a stable project-specific
-soul pointer.
+This project was built with Claude Code. `CLAUDE.md` is the runtime
+entrypoint; this file is the source contract it points back to.
 
 ## Loop
 
@@ -61,11 +57,7 @@ is active and the work has been explicitly split into lanes.
 
 ## Files
 
-- `AGENTS.md` (this file) is the **source contract** for every runtime.
-- `CLAUDE.md` is a thin entrypoint for Claude Code that points back here
-  and adds Claude-only addenda (skills, subagents, Claude harness tools).
-- Other runtime entrypoints (`.cursorrules`, codex `AGENTS.md`,
-  `GEMINI.md`, etc.) should follow the same pattern: read this file,
-  then add only runtime-specific addenda. Do not duplicate the contract
-  into every entrypoint — drift is inevitable.
-- `.planning/AGENTS.md` narrows the rules for planning-only edits.
+- `AGENTS.md` (this file) — the source contract.
+- `CLAUDE.md` — Claude Code entrypoint, points back here with
+  Claude-only addenda (skills, subagents, harness tools).
+- `.planning/AGENTS.md` — narrows the rules for planning-only edits.
