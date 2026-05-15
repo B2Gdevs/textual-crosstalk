@@ -28,7 +28,7 @@ except ImportError:
 class ElevenLabsClient:
     """ElevenLabs TTS with char-level timestamp support."""
 
-    SAMPLE_RATE = 44100  # ElevenLabs default mp3 → we request PCM via mpegts or use bytes directly
+    SAMPLE_RATE = 44100  # Matches output_format="pcm_44100" — int16 mono, no decode needed
 
     def __init__(
         self,
@@ -70,7 +70,7 @@ class ElevenLabsClient:
             voice_id=self._voice_id,
             text=text,
             model_id=self._model_id,
-            output_format="mp3_44100_128",
+            output_format="pcm_44100",
         )
 
         # Response has: audio_base64, alignment dict
@@ -98,25 +98,13 @@ class ElevenLabsClient:
         return audio_bytes, char_entries
 
     async def play_audio(self, audio_bytes: bytes) -> None:
-        """Decode mp3 and play via sounddevice. Runs in executor."""
+        """Play raw int16 PCM @ 44.1kHz via sounddevice. Runs in executor."""
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._sync_play, audio_bytes)
 
     def _sync_play(self, audio_bytes: bytes) -> None:
         try:
-            import pydub  # type: ignore[import]
-            audio = pydub.AudioSegment.from_mp3(io.BytesIO(audio_bytes))
-            samples = np.array(audio.get_array_of_samples(), dtype=np.int16)
-            if audio.channels == 2:
-                samples = samples.reshape(-1, 2)
-            sd.play(samples, samplerate=audio.frame_rate, blocking=True)
-        except ImportError:
-            # pydub not available — try soundfile
-            try:
-                import soundfile as sf  # type: ignore[import]
-                data, sr = sf.read(io.BytesIO(audio_bytes))
-                sd.play(data, samplerate=sr, blocking=True)
-            except Exception as exc:
-                print(f"[tts] audio playback failed (install pydub or soundfile): {exc}")
+            samples = np.frombuffer(audio_bytes, dtype=np.int16)
+            sd.play(samples, samplerate=self.SAMPLE_RATE, blocking=True)
         except Exception as exc:
             print(f"[tts] playback error: {exc}")
