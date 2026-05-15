@@ -1,9 +1,7 @@
 textual>=0.50
 textual-dev>=1.0
 sounddevice>=0.4.6
-deepgram-sdk>=3.7,<4
-# Pinned to v3.x — v7 has rewritten API (no DeepgramClientOptions/LiveOptions/LiveTranscriptionEvents).
-# If you need v7, rewrite scripts/conduit_tui/deepgram_client.py against the new API.
+deepgram-sdk>=7.0,<8
 openai>=1.50
 elevenlabs>=1.0
 python-dotenv>=1.0

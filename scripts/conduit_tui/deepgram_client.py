@@ -1,8 +1,17 @@
 """
 deepgram_client.py — DeepgramStream: WebSocket client with word-final char interpolation.
 
-Uses deepgram-sdk >= 3. On is_final transcript events, iterates word list and
-interpolates char timestamps linearly. Emits CharEntry list via callback.
+Uses deepgram-sdk >= 7. Streaming API:
+  client.listen.v1.connect(...)  → AsyncIterator[AsyncV1SocketClient]
+  socket.on(EventType.MESSAGE, handler)
+  socket.send_media(bytes)
+  socket.start_listening() — recv loop
+
+Messages parsed into typed responses; we dispatch on `.type`:
+  - "Results" → ListenV1Results with channel.alternatives[0].words
+  - "UtteranceEnd"
+  - "SpeechStarted"
+  - "Metadata"
 
 Latency target: chars in store within 300ms of is_final callback fire.
 """
@@ -12,29 +21,17 @@ import asyncio
 import time
 from typing import Callable
 
-from deepgram import (
-    DeepgramClient,
-    DeepgramClientOptions,
-    LiveOptions,
-    LiveTranscriptionEvents,
-)
+from deepgram import AsyncDeepgramClient
+from deepgram.core.events import EventType
 
 from .char_timeline import CharEntry, interpolate_chars
 
 
-WordCallback = Callable[[list[CharEntry], str], None]  # (chars, partial_text)
+WordCallback = Callable[[list[CharEntry], str], None]
 
 
 class DeepgramStream:
-    """Async Deepgram live transcription session.
-
-    Args:
-        api_key: Deepgram API key.
-        sample_rate: Audio sample rate (default 16000).
-        on_chars: Called with (list[CharEntry], "final") for final words.
-        on_partial: Called with (str,) for interim results display.
-        session_start: Monotonic time baseline for absolute timestamps.
-    """
+    """Async Deepgram live transcription session (SDK v7+)."""
 
     def __init__(
         self,
@@ -49,18 +46,14 @@ class DeepgramStream:
         self._on_chars = on_chars
         self._on_partial = on_partial
         self._session_start = session_start or time.monotonic()
-        self._live = None
-        self._client: DeepgramClient | None = None
+        self._client: AsyncDeepgramClient | None = None
+        self._cm = None
+        self._socket = None
+        self._listen_task: asyncio.Task | None = None
 
     async def connect(self) -> None:
-        config = DeepgramClientOptions(options={"keepalive": "true"})
-        self._client = DeepgramClient(self._api_key, config)
-        self._live = self._client.listen.asynclive.v("1")
-
-        self._live.on(LiveTranscriptionEvents.Transcript, self._on_transcript)
-        self._live.on(LiveTranscriptionEvents.Error, self._on_error)
-
-        options = LiveOptions(
+        self._client = AsyncDeepgramClient(api_key=self._api_key)
+        self._cm = self._client.listen.v1.connect(
             model="nova-3",
             language="en-US",
             encoding="linear16",
@@ -71,60 +64,81 @@ class DeepgramStream:
             smart_format=True,
             utterance_end_ms=1500,
         )
-        started = await self._live.start(options)
-        if not started:
-            raise RuntimeError("Deepgram live connection failed to start")
+        self._socket = await self._cm.__aenter__()
+        self._socket.on(EventType.MESSAGE, self._on_message)
+        self._socket.on(EventType.ERROR, self._on_error)
+        self._listen_task = asyncio.create_task(self._socket.start_listening())
 
     async def send(self, audio_bytes: bytes) -> None:
-        if self._live:
-            await self._live.send(audio_bytes)
+        if self._socket:
+            await self._socket.send_media(audio_bytes)
 
     async def finish(self) -> None:
-        if self._live:
-            await self._live.finish()
-
-    async def _on_transcript(self, _client: object, result: object, **kwargs: object) -> None:
         try:
-            alt = result.channel.alternatives[0]
-            transcript = alt.transcript
-            is_final = result.is_final
+            if self._socket:
+                await self._socket.send_close_stream()
+        except Exception:
+            pass
+        if self._cm:
+            try:
+                await self._cm.__aexit__(None, None, None)
+            except Exception:
+                pass
+        if self._listen_task and not self._listen_task.done():
+            self._listen_task.cancel()
+            try:
+                await self._listen_task
+            except (asyncio.CancelledError, Exception):
+                pass
+
+    async def _on_message(self, parsed: object) -> None:
+        try:
+            msg_type = getattr(parsed, "type", None)
+            if msg_type != "Results":
+                return
+
+            channel = getattr(parsed, "channel", None)
+            if not channel:
+                return
+            alts = getattr(channel, "alternatives", None) or []
+            if not alts:
+                return
+            alt = alts[0]
+            transcript = getattr(alt, "transcript", "") or ""
+            is_final = bool(getattr(parsed, "is_final", False))
 
             if not transcript:
                 return
 
             if not is_final:
-                # Interim result — update partial display
                 if self._on_partial:
                     self._on_partial(transcript)
                 return
 
-            # Final result — interpolate char timestamps from word list
             words = getattr(alt, "words", []) or []
             all_chars: list[CharEntry] = []
 
             if words:
                 for word_obj in words:
-                    word_text = word_obj.word
-                    # Deepgram gives absolute seconds from audio start;
-                    # add session_start offset for absolute monotonic time
-                    word_start = self._session_start + float(word_obj.start)
-                    word_end = self._session_start + float(word_obj.end)
+                    word_text = getattr(word_obj, "word", "") or getattr(word_obj, "punctuated_word", "")
+                    word_start = self._session_start + float(getattr(word_obj, "start", 0.0))
+                    word_end = self._session_start + float(getattr(word_obj, "end", word_start))
                     chars = interpolate_chars(
                         word_text, word_start, word_end, "user,interpolated"
                     )
                     all_chars.extend(chars)
             else:
-                # No word timestamps — fallback: emit chars with zero-width times
                 now = time.monotonic()
                 for ch in transcript:
-                    all_chars.append(CharEntry(char=ch, start_time=now, end_time=now, notes="user,no-words"))
+                    all_chars.append(
+                        CharEntry(char=ch, start_time=now, end_time=now, notes="user,no-words")
+                    )
 
             if all_chars and self._on_chars:
                 self._on_chars(all_chars)
 
         except Exception as exc:
-            # Never let a transcript callback crash the stream
             print(f"[deepgram] transcript handler error: {exc}")
 
-    async def _on_error(self, _client: object, error: object, **kwargs: object) -> None:
+    async def _on_error(self, error: object) -> None:
         print(f"[deepgram] error: {error}")
