@@ -5,10 +5,13 @@
   </stamped-tasks>
   <status>active</status>
   <milestone>v1</milestone>
-  <current-phase></current-phase>
+  <current-phase>00</current-phase>
   <last-activity>2026-05-15</last-activity>
   <next-action>Phase 00 — install deps + verify API keys. Run: pip install deepgram-sdk groq elevenlabs sounddevice python-dotenv. Write .env with DEEPGRAM_API_KEY=07101d289c209b4af367aef6c517e640c5493079 + GROQ_API_KEY + ELEVENLABS_API_KEY. Smoke-test each API with a 3-line script. Then CONDUIT-PROJ-T-01-01 (project skeleton).</next-action>
   <state-log>
+    <entry agent="unknown" at="2026-05-15T21:35:21.918Z">Speaker classifier shipped (pure numpy, 29-dim MFCC+delta+F0+centroid+ZCR). Auto-enrolls bot from TTS PCM, user from AEC-cleaned first-turn mic. Used as barge-in tiebreaker — if audio classifies as bot, barge suppressed. ONNX-based upgrade path documented in README (decision D-019). Bot-replies-to-self loop now has 3 stacked defenses: AEC at audio layer, speaker classifier at feature layer, time gate at state layer.</entry>
+    <entry agent="unknown" at="2026-05-15T21:26:41.765Z" tags="phases,sweep,close">Closed phase 02 via gad phases sweep --auto-close - 1 done, 0 cancelled.</entry>
+    <entry agent="unknown" at="2026-05-15T21:26:41.754Z" tags="phases,sweep,close">Closed phase 01 via gad phases sweep --auto-close - 7 done, 0 cancelled.</entry>
     <entry agent="unknown" at="2026-05-15T21:17:02.431Z">Found and fixed post-barge gate re-close bug (E6): _barge_in opened finals_gate, then play_audio's finally branch unconditionally re-closed it for 0.6s, swallowing user continuation. Now only resets gate on natural TTS end. Also loosened _is_bot_echo to require &gt;= 2 words. Speaker-recognition path (resemblyzer/torch) deferred — likely unnecessary if the gate bug was the actual root cause. E5 remains open until user retests b5d11a8+ confirms interrupt-and-continue works.</entry>
     <entry agent="unknown" at="2026-05-15T20:51:36.872Z">Conversational tuning shipped: AEC_PREPROCESS off by default (D-018), CROSSTALK_MIN_WORDS default 3→1, mic-gate state surfaced as 'listening'/'muted' STT status. Error history backfilled — 5 errors logged (E1-E5) covering LLM trigger, ElevenLabs free-tier walls, self-reply loop, between-turn silence, interrupt-and-continue regression. E5 marked open pending user retest.</entry>
     <entry agent="unknown" at="2026-05-15T20:36:41.319Z">AEC integrated: pyaec/speexdsp backend processes every mic chunk against decoded TTS reference before Deepgram sees it. ~20 dB ERLE measured on round-trip test. Decision D-017 captures the audio-layer fix rationale. Time gate retained as belt-and-suspenders for the first few convergence frames.</entry>

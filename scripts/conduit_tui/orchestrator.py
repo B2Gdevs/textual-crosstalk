@@ -38,6 +38,7 @@ from .crosstalk import Crosstalk
 from .deepgram_client import DeepgramStream
 from .llm_client import LLMClient
 from .mic_capture import MicStream
+from .speaker_id import SpeakerClassifier
 from .tts_client import ElevenLabsClient
 
 
@@ -111,6 +112,25 @@ class ConversationLoop:
         # output from the live mic input before Deepgram ever sees it.
         # See scripts/conduit_tui/aec.py for backend selection.
         self._aec = make_echo_canceller(mic_rate=sample_rate)
+        self._sample_rate = int(sample_rate)
+
+        # Pure-numpy speaker classifier (MFCC + delta + F0 + centroid
+        # + ZCR → 29-dim, cosine similarity). Used as a tiebreaker for
+        # barge-in: if Deepgram emits a partial during TTS but the
+        # underlying audio classifies as the bot voice (residual echo
+        # the AEC didn't fully suppress), the barge is dropped. See
+        # scripts/conduit_tui/speaker_id.py.
+        self._spk = SpeakerClassifier(sample_rate=sample_rate)
+        # Rolling 1.5s ring buffer of AEC-cleaned mic audio, so we can
+        # classify the speech that produced any given Deepgram event.
+        self._mic_ring_size = int(sample_rate * 1.5)
+        self._mic_ring = np.zeros(0, dtype=np.int16)
+        # Snapshot of mic audio at the moment the current user utterance
+        # started — used to enroll the user template on first turn.
+        self._user_enrol_start_size: int | None = None
+        self._spk_margin_threshold = float(
+            os.environ.get("SPEAKER_MARGIN_THRESHOLD", "0.005")
+        )
 
         # Barge-in state
         self._tts_playing = False
@@ -183,6 +203,10 @@ class ConversationLoop:
                 mic_arr = np.frombuffer(chunk, dtype=np.int16)
                 cleaned = self._aec.process(mic_arr)
                 if cleaned.size > 0:
+                    # Append to rolling buffer for speaker classification.
+                    self._mic_ring = np.concatenate([self._mic_ring, cleaned])
+                    if self._mic_ring.size > self._mic_ring_size:
+                        self._mic_ring = self._mic_ring[-self._mic_ring_size:]
                     await self._dg.send(cleaned.tobytes())
             except asyncio.TimeoutError:
                 continue
@@ -219,11 +243,31 @@ class ConversationLoop:
         # Barge-in: if bot is currently speaking and the user's partial
         # has crossed the threshold, cut the playback immediately —
         # unless the partial looks like the bot's own audio echoing back
-        # through the mic (self-interruption).
+        # through the mic OR the speaker classifier says the underlying
+        # audio is actually the bot, not the user.
         if self._tts_playing and len(text.strip()) >= self._barge_in_chars:
             if self._is_bot_echo(text):
                 return
+            if self._classify_recent_speech() == "bot":
+                return
             self._barge_in()
+
+    def _classify_recent_speech(self) -> str:
+        """Classify the last ~600ms of AEC-cleaned mic audio. Returns
+        'user' | 'bot' | 'unknown'. Falls back to 'user' (= allow barge)
+        whenever the classifier is uncertain or not yet enrolled —
+        bias is firmly toward letting the human be heard.
+        """
+        if not self._spk.enrolled:
+            return "unknown"
+        sr = self._sample_rate
+        window = self._mic_ring[-int(sr * 0.6):]
+        if window.size < int(sr * 0.25):
+            return "unknown"
+        label, margin = self._spk.classify(window)
+        if margin < self._spk_margin_threshold:
+            return "unknown"
+        return label
 
     def _is_bot_echo(self, partial: str) -> bool:
         """True if the partial looks like residual bot audio bleeding
@@ -256,6 +300,40 @@ class ConversationLoop:
     async def _clear_echo_guard_after(self, delay_s: float) -> None:
         await asyncio.sleep(delay_s)
         self._current_bot_text_norm = ""
+
+    def _prepare_bot_audio(self, audio_bytes: bytes) -> None:
+        """Decode the bot mp3 once, push to AEC reference, and (one
+        time) enrol the speaker classifier with the bot voice. Runs in
+        a worker thread via asyncio.to_thread."""
+        try:
+            import miniaudio
+        except ImportError:
+            self._aec.push_reference_mp3(audio_bytes)
+            return
+        try:
+            decoded = miniaudio.decode(audio_bytes)
+        except Exception as exc:
+            print(f"[orchestrator] tts decode for prepare failed: {exc}")
+            self._aec.push_reference_mp3(audio_bytes)
+            return
+        samples = np.frombuffer(decoded.samples, dtype=np.int16)
+        if decoded.nchannels > 1:
+            samples = samples.reshape(-1, decoded.nchannels)
+        self._aec.push_reference(samples, decoded.sample_rate)
+        if not self._spk.bot_enrolled:
+            # Take a clean middle slice to enrol from (avoid attack/decay).
+            mono = samples.mean(axis=1).astype(np.int16) if samples.ndim == 2 else samples
+            slice_len = int(decoded.sample_rate * 1.5)
+            mid = mono.size // 2
+            clip = mono[max(0, mid - slice_len // 2): mid + slice_len // 2]
+            # Resample to classifier rate (16kHz) if needed.
+            if decoded.sample_rate != self._sample_rate:
+                ratio = self._sample_rate / decoded.sample_rate
+                n_out = max(1, int(clip.size * ratio))
+                src_t = np.linspace(0.0, 1.0, clip.size, dtype=np.float32)
+                dst_t = np.linspace(0.0, 1.0, n_out, dtype=np.float32)
+                clip = np.interp(dst_t, src_t, clip.astype(np.float32)).astype(np.int16)
+            self._spk.enrol_bot(clip)
 
     def _barge_in(self) -> None:
         """Cut in-flight TTS playback. Called from partial handler."""
@@ -305,6 +383,13 @@ class ConversationLoop:
 
         if not words_in_batch:
             return
+
+        # One-time user enrollment for the speaker classifier — take the
+        # mic ring buffer at the moment of the first real is_final
+        # (when we're sure the user just spoke).
+        if not self._spk.user_enrolled and self._mic_ring.size >= self._sample_rate // 2:
+            enrol_clip = self._mic_ring.copy()
+            self._spk.enrol_user(enrol_clip)
 
         # Hard time gate: while TTS is playing (and during the brief
         # post-TTS cooldown), drop finals before they can reach Crosstalk.
@@ -392,7 +477,12 @@ class ConversationLoop:
             # mic_pump may process a chunk or two with no reference yet
             # — those arrive before the speaker has actually started
             # producing echo, so the pass-through is correct.
-            await asyncio.to_thread(self._aec.push_reference_mp3, audio_bytes)
+            # We also (once) enrol the bot's voiceprint from this PCM
+            # so the speaker classifier can distinguish it from the
+            # user at runtime.
+            await asyncio.to_thread(
+                self._prepare_bot_audio, audio_bytes
+            )
             try:
                 await self._tts.play_audio(audio_bytes)
             finally:

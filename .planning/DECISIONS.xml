@@ -146,4 +146,16 @@
     </references>
   </decision>
 
+  <decision id="CONDUIT-PROJ-D-019">
+    <title>Speaker classification: pure-numpy MFCC+F0+centroid for V1; ONNX learned embeddings as documented upgrade path</title>
+    <date>2026-05-15</date>
+    <summary>Three-tier roadmap. Tier 0 (shipped): pure-numpy 29-dim feature vector — 13 MFCC + 13 delta-MFCC + F0 + spectral centroid + ZCR, cosine compare against enrolled user/bot templates. Zero new dependencies, ~1ms per inference, ~85-90 percent accuracy on a closed-set 2-speaker task. Auto-enrolls on first turn for each speaker; user template cached at ~/.conduit/voiceprint_user.npy. Tier 1 (documented, not yet built): convert a pretrained ECAPA-TDNN or x-vector model to ONNX, ship model file plus onnxruntime — ~30-50 MB total, ~256-dim learned embeddings, ~95-98 percent EER, no torch dep. Same extract_features/classify interface so it's a drop-in. Tier 2 (future): distilled int8 CNN at ~5-15 MB. Decision: ship Tier 0 first, observe whether residual misclassifications matter, only escalate when measured.</summary>
+    <impact>Adds a speaker-aware override to the barge logic without adding a 500 MB torch dependency. The 29-dim feature space and cosine-similarity gate is the same scaffolding used by every speaker-ID system; replacing handcrafted features with learned embeddings is a localized swap, not an architectural change. SPEAKER_MARGIN_THRESHOLD env knob lets operators tune confidence-vs-responsiveness without code changes. Classifier biases 'allow barge' when uncertain — the human must always be able to interrupt.</impact>
+    <references>
+      <file path="scripts/conduit_tui/speaker_id.py"/>
+      <file path="scripts/conduit_tui/orchestrator.py"/>
+      <file path="README.md"/>
+    </references>
+  </decision>
+
 </decisions>

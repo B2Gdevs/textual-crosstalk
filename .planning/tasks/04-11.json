@@ -1,0 +1,31 @@
+{
+  "id": "04-11",
+  "phase": "04",
+  "status": "done",
+  "goal": "Pure-numpy speaker classifier as barge-in tiebreaker. scripts/conduit_tui/speaker_id.py extracts 29-dim features (13 MFCC + 13 delta-MFCC + F0 via autocorr + spectral centroid + ZCR) using only numpy — same DSP foundation as Resemblyzer/SpeechBrain, no torch. SpeakerClassifier.classify returns (user|bot|unknown, margin). Auto-enrolls bot from the decoded TTS PCM on first turn (slice the middle 1.5s); auto-enrolls user from the AEC-cleaned mic ring buffer on first is_final. User template persists at ~/.conduit/voiceprint_user.npy. Orchestrator maintains a 1.5s mic ring buffer and calls _classify_recent_speech() in _handle_dg_partial — if the partial's underlying audio classifies as bot, barge is suppressed. Bias firmly toward 'allow barge' when uncertain. SPEAKER_MARGIN_THRESHOLD env knob (default 0.005).",
+  "type": "code",
+  "keywords": "",
+  "depends": [
+    "04-10"
+  ],
+  "commands": [],
+  "files": [
+    "scripts/conduit_tui/speaker_id.py",
+    "scripts/conduit_tui/orchestrator.py",
+    "README.md"
+  ],
+  "agent_id": "claude-opus-4-7",
+  "agent_role": "",
+  "runtime": "claude-code",
+  "model_profile": "",
+  "resolved_model": "",
+  "skill": "",
+  "claimed_by": "",
+  "claimed": false,
+  "claimed_at": "",
+  "lease_expires_at": "",
+  "completed_at": "",
+  "resolution": "",
+  "created_at": "2026-05-15T21:34:57.867Z",
+  "updated_at": "2026-05-15T21:34:58.371Z"
+}

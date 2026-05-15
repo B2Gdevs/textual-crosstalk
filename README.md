@@ -149,6 +149,29 @@ Behavior knobs that shape how forgiving / aggressive the conversation feels:
 
 **Status indicator.** The status bar shows `STT: listening` when the system is actively accepting your speech, and `STT: muted` while the finals gate is closed (during TTS + cooldown). A barge flips it to `listening` immediately. If the bar says `muted` and you want to be heard, wait the cooldown out OR speak loud enough to trigger barge.
 
+## Speaker classifier
+
+Pure-numpy 2-speaker classifier (user vs the specific TTS voice) used as a barge-in tiebreaker — if Deepgram emits a partial during TTS but the audio classifies as the bot voice (residual echo the AEC didn't fully suppress), barge is dropped. If it classifies as user, barge fires. Bias is toward "allow barge" when the classifier is uncertain.
+
+**Features (29-dim per utterance):** 13 MFCC + 13 ΔMFCC + F0 (pitch) + spectral centroid + zero-crossing rate. L2-normalized, cosine similarity. Same DSP foundation Resemblyzer and SpeechBrain stand on — just with handcrafted features instead of learned ones, so no torch dependency.
+
+**Enrollment:** automatic on first run. The user template is captured from the first AEC-cleaned user utterance and cached at `~/.conduit/voiceprint_user.npy`. The bot template is recomputed every session from the first TTS sample (the voice can change via `ELEVENLABS_VOICE_ID`). Delete the cache file to re-enroll.
+
+**Tuning:**
+| Variable | Default | Notes |
+|---|---|---|
+| `SPEAKER_MARGIN_THRESHOLD` | `0.005` | minimum cosine-similarity margin to trust the classification. Below this, classifier returns "unknown" and barge is allowed. Raise for stricter gating, lower for more responsiveness. |
+
+### Upgrade path (when handcrafted features hit their ceiling)
+
+The pure-numpy classifier gets ~85-90% accuracy on a 2-speaker closed-set, which is enough to materially improve barge gating. Two upgrade tiers if it isn't:
+
+**Tier 1 — ONNX speaker embedding (~30-50 MB total).** Convert a pretrained ECAPA-TDNN (SpeechBrain) or x-vector model to ONNX, ship the model file + `onnxruntime`. No torch dependency. ~256-dim learned embeddings replace the 29 handcrafted features. Expected accuracy: ~95-98% EER. Trade-off: ~50 MB on disk, ~10ms per inference on CPU.
+
+**Tier 2 — Distilled neural model (~5-15 MB).** Train (or fine-tune) a small CNN on mel-spectrograms for 2-class speaker discrimination. Quantize to int8. Could fit in <10 MB with minimal accuracy loss for the closed-set 2-speaker task. Most work; biggest payoff if Tier 1 still leaves gaps.
+
+The current implementation in `scripts/conduit_tui/speaker_id.py` keeps the same interface (`extract_features`, `SpeakerClassifier.classify`) that either tier would slot into — `extract_features` becomes the ONNX forward pass; everything downstream is unchanged.
+
 **Common conversational fixes if a turn isn't working:**
 - *"Bot doesn't respond after I pause"* → lower `CROSSTALK_SETTLED_THRESHOLD_MS` or `CROSSTALK_MIN_WORDS`.
 - *"Bot interrupts itself / replies to itself"* → confirm `pyaec` is installed (`pip show pyaec`); raise `AEC_FILTER_MS` to 256 for Bluetooth speakers.
