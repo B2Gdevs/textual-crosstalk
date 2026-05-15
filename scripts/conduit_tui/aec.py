@@ -124,13 +124,21 @@ class SpeexEchoCanceller(EchoCancellerBase):
         super().__init__(mic_rate)
         frame_ms = int(os.environ.get("AEC_FRAME_MS", "10"))
         tail_ms = int(os.environ.get("AEC_FILTER_MS", "128"))
+        # The speex preprocessor (noise-suppress + AGC + VAD) learns a
+        # noise floor across frames. During a long bot turn that floor
+        # quietly incorporates the AEC's residual echo error, and after
+        # the user barges in their continuation can be suppressed
+        # because it sits below the learned "noise". Default is OFF so
+        # we get pure echo cancellation; let downstream STT VAD handle
+        # noise. Flip to "1" if you actually want speex preprocessing.
+        preprocess = os.environ.get("AEC_PREPROCESS", "0") not in ("0", "false", "False", "")
         self.frame_size = int(mic_rate * frame_ms / 1000)
         self.filter_length = int(mic_rate * tail_ms / 1000)
         self._ec = pyaec.Aec(
             frame_size=self.frame_size,
             filter_length=self.filter_length,
             sample_rate=mic_rate,
-            enable_preprocess=True,  # noise suppress + AGC + VAD
+            enable_preprocess=preprocess,
         )
 
     def process(self, mic_int16: np.ndarray) -> np.ndarray:

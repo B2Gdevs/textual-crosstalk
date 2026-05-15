@@ -1,4 +1,46 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <errors-and-attempts project="conduit-proj" schema="1">
   <!-- <entry id="<slug>-YYYY-MM-DD" date="YYYY-MM-DD"><what>...</what><why>...</why><lesson>...</lesson></entry> -->
+
+  <entry id="llm-never-fires-after-pause-2026-05-15" date="2026-05-15" phase="04" task="04-01" status="resolved" kind="code">
+    <summary>LLM never fired after user stopped speaking (multi-word is_final batches collapsed to one pending_finals entry)</summary>
+    <context>Part 1+2 end-to-end test 2026-05-15. User says 'this is ben can you hear me' — chars stored, transcript visible in TUI — then pause. Bot never replies.</context>
+    <failure>Deepgram emits is_final for whole utterances (multiple words in one Results message). Orchestrator concatenated ALL chars from one batch into a single 'helloworldhowareyou' token and appended it as ONE entry to _pending_finals. word_count stayed at 1 per Deepgram event, never reaching Crosstalk.MIN_WORDS_FOR_SPECULATION=3. Speculation never scheduled → no LLM call → no response. Cost: full 5-minute test session before user reported it.</failure>
+    <rule>When splitting transcripts in an orchestrator, count actual word tokens — not events. Use word=X tags already embedded by interpolate_chars in CharEntry.notes to split a batch back into its words. Trusting Deepgram's is_final to mean 'one word' is wrong; finals can contain whole utterances.</rule>
+    <reference>scripts/conduit_tui/orchestrator.py</reference>
+  </entry>
+
+  <entry id="elevenlabs-free-tier-three-walls-2026-05-15" date="2026-05-15" phase="04" task="04-02" status="resolved" kind="framework">
+    <summary>Three stacked ElevenLabs auth/format errors masked the TTS path on a free-tier account</summary>
+    <context>After fixing the LLM trigger, bot's text appeared in the TUI but no audio played. Free-tier ElevenLabs account, library voice (Rachel), pcm_44100 output, eleven_monolingual_v1 model — pattern lifted from older docs.</context>
+    <failure>Three errors hit in sequence: 401 (model deprecated on free tier), 403 (output_format pcm_44100 requires Pro), 402 (library voice Rachel requires paid plan). Plus the SDK response field had been renamed audio_base64 → audio_base_64. Each error required reading the JSON response body — the SDK only surfaced .message. ~30 min lost across three smoke-test loops.</failure>
+    <rule>When integrating a third-party SDK that has tier-gated features, parse the FULL error body (type, code, message) on first failure — don't loop on .message. Default to the cheapest known-working combination for each tier: eleven_flash_v2_5 model, mp3_44100_128 output, premade voice (e.g. Sarah EXAVITQu4vr4xnSDxMaL), then layer up if the account permits.</rule>
+    <reference>scripts/conduit_tui/tts_client.py</reference>
+  </entry>
+
+  <entry id="bot-replies-to-itself-via-stt-echo-2026-05-15" date="2026-05-15" phase="04" task="04-08" status="resolved" kind="code">
+    <summary>Bot's TTS bled through speakers, Deepgram transcribed it, bot replied to itself in a feedback loop</summary>
+    <context>After TTS started working, user reported the bot was 'getting in a loop with itself when it hears its own voice'. Initial text-based echo guard (word-set membership against bot's outgoing text) was implemented but did not stop the loop.</context>
+    <failure>Three attempts failed before AEC: (1) bot-text substring match — too aggressive, swallowed user barge when user happened to use bot-vocabulary words; (2) word-overlap threshold (60% words match) — same problem; (3) ALL-words-in-bot-text rule — still failed because Deepgram occasionally hallucinates a novel word from speaker echo + breath + room noise. One hallucinated word slipped the heuristic, the echoed transcript entered Crosstalk, bot replied to itself. Total cost: ~3 patches over ~45 min before recognizing the architectural mistake.</failure>
+    <rule>Text-content echo guards are structurally insufficient. Probabilistic STT (Deepgram, Whisper, etc.) hallucinates novel words from broadband audio noise — one hallucinated word slips any text-similarity check. Fix at the audio layer (AEC), not the text layer. If you have the bot's reference signal (we always do — we played it), use an adaptive filter. speexdsp via pyaec is battle-tested and ships prebuilt wheels.</rule>
+    <reference>scripts/conduit_tui/aec.py</reference>
+    <reference>scripts/conduit_tui/orchestrator.py</reference>
+  </entry>
+
+  <entry id="user-silenced-after-first-bot-turn-2026-05-15" date="2026-05-15" phase="04" task="04-08" status="resolved" kind="code">
+    <summary>User couldn't be heard between turns after AEC was wired in (residual ref starved the frame loop)</summary>
+    <context>After turning on speexdsp AEC the bot stopped replying to itself, but the user reported 'after i speak and then the agent speaks, noone can speak now'.</context>
+    <failure>EchoCanceller.process required BOTH _ref_buf &gt;= F and _mic_buf &gt;= F to enter its frame loop. When the bot's TTS ended, a fractional reference frame (&lt; 160 samples) remained queued — rate slop between mp3-decoded reference push (one big buffer) and mic-pump consumption (1024-sample chunks). The loop never re-entered, mic samples accumulated in _mic_buf forever, mic_pump sent empty bytes to Deepgram on every chunk. User appeared mute. Caught by user report after first 2-turn conversation.</failure>
+    <rule>Any framed/blocked audio processor in a streaming pipeline MUST handle sub-frame residuals — either by draining the residual (drop) or by zero-padding to a full frame. Never let an undrainable residual stall the input queue. Add a passthrough fast-path when the auxiliary input is &lt; one frame. Also: explicit clear at handoff points (end of TTS → call aec.clear_reference()) as belt-and-suspenders.</rule>
+    <reference>scripts/conduit_tui/aec.py</reference>
+  </entry>
+
+  <entry id="cannot-interrupt-and-continue-2026-05-15" date="2026-05-15" phase="04" status="open" kind="conversational">
+    <summary>User couldn't interrupt the bot AND have their follow-up speech captured (suspect: speex preprocessor over-suppression)</summary>
+    <context>After the dribble fix landed (0be5ec6), user tested interruption mid-bot-turn. Their barge cut TTS as expected, but the continuation (their next words after the cut) were not captured / no new LLM cycle started.</context>
+    <failure>Likely cause under investigation: pyaec is constructed with enable_preprocess=True, which enables speex's noise-suppress + AGC + VAD wrapping the AEC. During a long bot turn the preprocessor learns a noise floor that includes (a) ambient room noise plus (b) the residual AEC error left over from echo cancellation. After barge clears the AEC reference, mic chunks pass through the AEC layer as identity — but they still go through the preprocessor, which may classify the user's post-barge voice as 'noise' relative to the floor it learned during TTS. Net effect: post-barge user speech is suppressed below the level Deepgram needs to emit interim partials.</failure>
+    <rule>When using a speech preprocessor (speex / webrtc-apm) with adaptive noise estimation, treat it as separately tunable from the AEC. Expose enable_preprocess as a config knob (AEC_PREPROCESS). For high-quality echo-only operation, run AEC with preprocess OFF and let downstream STT VAD handle the rest. The preprocessor's noise estimator does not have a notion of 'turn change' — it can carry a stale floor across turn boundaries and silence the new speaker.</rule>
+    <reference>scripts/conduit_tui/aec.py</reference>
+    <reference>scripts/conduit_tui/orchestrator.py</reference>
+  </entry>
 </errors-and-attempts>

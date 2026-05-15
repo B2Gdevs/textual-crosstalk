@@ -133,4 +133,17 @@
     </references>
   </decision>
 
+  <decision id="CONDUIT-PROJ-D-018">
+    <title>Speex preprocessor off by default; conversational behavior surfaces as named env knobs</title>
+    <date>2026-05-15</date>
+    <summary>After AEC was wired in, the user reported they could not interrupt and continue (their post-barge speech was lost). Root cause hypothesis: pyaec.Aec(enable_preprocess=True) wraps the AEC with speex's noise-suppress + AGC + VAD. The preprocessor's noise estimator learns the noise floor across frames; during a long bot turn that floor incorporates the AEC residual (small leftover echo), and after a barge the preprocessor keeps suppressing the user's voice because it sits within the learned floor. Decision: default AEC_PREPROCESS=0 so we get pure echo cancellation with no aggressive noise gating. Downstream STT (Deepgram) has its own VAD and tolerates real ambient noise. Operators can flip AEC_PREPROCESS=1 if they want the speex preprocessor back. Also: CROSSTALK_MIN_WORDS default lowered 3→1 — under MIN_WORDS=3, the most natural barge replies ('no', 'stop', 'wait') would never reach the LLM. Conversational behavior (barge sensitivity, speculation timing, cooldown) is now documented as a named env-knob surface in README so operators can tune for their environment without code changes.</summary>
+    <impact>User can now interrupt and continue — the post-barge continuation reaches the LLM. Pure AEC + Deepgram VAD is the new default audio pipeline; the speex preprocessor remains available as an opt-in for environments with heavy ambient noise. Conversational tuning section in README turns 'feels off' user feedback into a concrete dial.</impact>
+    <references>
+      <file path="scripts/conduit_tui/aec.py"/>
+      <file path="scripts/conduit_tui/crosstalk.py"/>
+      <file path="scripts/conduit_tui/orchestrator.py"/>
+      <file path="README.md"/>
+    </references>
+  </decision>
+
 </decisions>

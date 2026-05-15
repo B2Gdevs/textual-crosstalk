@@ -1,0 +1,32 @@
+{
+  "id": "04-09",
+  "phase": "04",
+  "status": "done",
+  "goal": "Conversational tuning + observability for the turn-taking loop. (1) AEC_PREPROCESS env knob, default off — speex's noise-suppress+AGC+VAD learns a noise floor that carried bot-residual energy across turn boundaries and suppressed user continuation post-barge. Pure AEC residual is fine for Deepgram. (2) CROSSTALK_MIN_WORDS default lowered 3→1 so short follow-ups ('no', 'stop', 'wait') fire an LLM cycle without the user padding. (3) Level pump emits 'listening' vs 'muted' STT state based on finals-gate position so the user can see at a glance when the mic is hot. (4) README adds a Conversational tuning table with troubleshooting recipes mapped to specific env knobs.",
+  "type": "code",
+  "keywords": "",
+  "depends": [
+    "04-08"
+  ],
+  "commands": [],
+  "files": [
+    "scripts/conduit_tui/aec.py",
+    "scripts/conduit_tui/crosstalk.py",
+    "scripts/conduit_tui/orchestrator.py",
+    "README.md"
+  ],
+  "agent_id": "claude-opus-4-7",
+  "agent_role": "",
+  "runtime": "claude-code",
+  "model_profile": "",
+  "resolved_model": "",
+  "skill": "",
+  "claimed_by": "",
+  "claimed": false,
+  "claimed_at": "",
+  "lease_expires_at": "",
+  "completed_at": "",
+  "resolution": "",
+  "created_at": "2026-05-15T20:51:19.183Z",
+  "updated_at": "2026-05-15T20:51:19.572Z"
+}

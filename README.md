@@ -132,7 +132,29 @@ Measured on a synthetic round-trip test: ~20 dB ERLE (echo return loss enhanceme
 |---|---|---|
 | `AEC_FILTER_MS` | `128` | speex tail length in ms — coverage for speaker latency + room reverb |
 | `AEC_FRAME_MS` | `10` | AEC processing frame size in ms |
+| `AEC_PREPROCESS` | `0` (off) | enable speex's noise-suppress + AGC + VAD wrapping the AEC. **Off by default** — its adaptive noise floor was found to over-suppress user speech across turn boundaries (see `ERRORS-AND-ATTEMPTS.xml` → `cannot-interrupt-and-continue-2026-05-15`). Flip to `1` if you want it back. |
 | `AEC_MU` | `0.3` | step size for numpy fallback (ignored when speex is active) |
+
+## Conversational tuning
+
+Behavior knobs that shape how forgiving / aggressive the conversation feels:
+
+| Knob | Effect |
+|---|---|
+| `CROSSTALK_MIN_WORDS=1` (default) | Even 1-word follow-ups ("no", "stop", "wait") fire an LLM cycle. Raise to 2-3 to suppress filler triggers ("uh", "um"). |
+| `CROSSTALK_SPECULATIVE_THRESHOLD_MS=250` | How long the user must pause before the LLM starts speculating on their utterance. Lower = snappier but more wasted LLM calls when user resumes. |
+| `CROSSTALK_SETTLED_THRESHOLD_MS=600` | How long the pause must persist for the speculative response to commit and TTS to start. |
+| `BARGE_IN_PARTIAL_CHARS=3` | Min chars of Deepgram partial text that cuts in-flight TTS. Lower = touchier barge. |
+| `POST_TTS_COOLDOWN_S=0.6` | After natural TTS end, finals are dropped from Crosstalk for this window (echo tail). Barge bypasses it. |
+
+**Status indicator.** The status bar shows `STT: listening` when the system is actively accepting your speech, and `STT: muted` while the finals gate is closed (during TTS + cooldown). A barge flips it to `listening` immediately. If the bar says `muted` and you want to be heard, wait the cooldown out OR speak loud enough to trigger barge.
+
+**Common conversational fixes if a turn isn't working:**
+- *"Bot doesn't respond after I pause"* → lower `CROSSTALK_SETTLED_THRESHOLD_MS` or `CROSSTALK_MIN_WORDS`.
+- *"Bot interrupts itself / replies to itself"* → confirm `pyaec` is installed (`pip show pyaec`); raise `AEC_FILTER_MS` to 256 for Bluetooth speakers.
+- *"Can't interrupt the bot"* → lower `BARGE_IN_PARTIAL_CHARS` to 2; raise mic gain.
+- *"Bot talks over me when I'm thinking"* → raise `CROSSTALK_SPECULATIVE_THRESHOLD_MS` and `CROSSTALK_SETTLED_THRESHOLD_MS`.
+- *"After bot finishes, it takes a beat before I can speak again"* → lower `POST_TTS_COOLDOWN_S` to 0.2.
 
 Implementation: `scripts/conduit_tui/crosstalk.py` (coordinator) + `scripts/conduit_tui/orchestrator.py` (wiring).
 Reference: https://github.com/tarzain/crosstalk (commit 327b2da).

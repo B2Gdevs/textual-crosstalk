@@ -192,9 +192,16 @@ class ConversationLoop:
                 print(f"[orchestrator] mic pump error: {exc}")
 
     async def _level_pump(self) -> None:
+        prev_gate_open: bool | None = None
         while self._running:
             if self._on_mic_level:
                 self._on_mic_level(self._mic.level)
+            # Surface gate state so the user can see whether the mic is
+            # being listened to or held closed during TTS+cooldown.
+            gate_open = time.monotonic() >= self._finals_gate_until
+            if gate_open != prev_gate_open and self._on_status:
+                self._on_status("stt", "listening" if gate_open else "muted")
+                prev_gate_open = gate_open
             await asyncio.sleep(0.1)
 
     # ------------------------------------------------------------------

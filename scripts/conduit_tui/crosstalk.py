@@ -55,8 +55,12 @@ class Crosstalk:
     SETTLED_THRESHOLD_MS: int = int(
         os.environ.get("CROSSTALK_SETTLED_THRESHOLD_MS", "600")
     )
+    # Default lowered to 1 so short follow-ups after a barge ("no",
+    # "wait stop", "actually red") trigger an LLM cycle without forcing
+    # the user to pad their reply. Raise to 2-3 if you want to suppress
+    # filler-word triggers ("uh", "um").
     MIN_WORDS_FOR_SPECULATION: int = int(
-        os.environ.get("CROSSTALK_MIN_WORDS", "3")
+        os.environ.get("CROSSTALK_MIN_WORDS", "1")
     )
 
     def __init__(
