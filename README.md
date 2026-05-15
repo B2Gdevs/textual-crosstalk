@@ -69,6 +69,29 @@ class CharEntry:
 
 **TTS chars** (`notes=bot,native`): ElevenLabs `convert_with_timestamps` returns exact per-character timing from the synthesis engine.
 
+## Crosstalk (Part 2)
+
+Speculative LLM firing + cancellation — eliminates the fixed 1.5s silence-wait that made Part 1 feel sluggish.
+
+**How it works:**
+1. Every Deepgram `is_final` word fires `Crosstalk.on_word_final()`.
+2. After `CROSSTALK_SPECULATIVE_THRESHOLD_MS` (250ms) of silence, the LLM call starts speculatively.
+3. If a new `is_final` arrives before `CROSSTALK_SETTLED_THRESHOLD_MS` (600ms), the in-flight `asyncio.Task` is cancelled — user kept talking. No buffered audio discarded.
+4. If silence holds for 600ms post-LLM-result, the response commits → TTS plays.
+
+**Env vars:**
+
+| Variable | Default | Notes |
+|---|---|---|
+| `CROSSTALK_SPECULATIVE_THRESHOLD_MS` | `250` | ms silence before speculative LLM start |
+| `CROSSTALK_SETTLED_THRESHOLD_MS` | `600` | ms silence before committing to TTS |
+| `CROSSTALK_MIN_WORDS` | `3` | minimum words to trigger speculation |
+
+Fragments under 3 words (e.g. "um", "yeah") are never speculated on — avoids wasted LLM calls on filler.
+
+Implementation: `scripts/conduit_tui/crosstalk.py` (coordinator) + `scripts/conduit_tui/orchestrator.py` (wiring).
+Reference: https://github.com/tarzain/crosstalk (commit 327b2da).
+
 ## Share
 
 Repo to be shared with GitHub user **RioPopper**.

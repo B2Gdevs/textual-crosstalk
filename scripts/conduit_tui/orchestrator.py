@@ -1,13 +1,19 @@
 """
 orchestrator.py — ConversationLoop: wires STT → LLM → TTS, manages turn state.
 
-Turn flow:
-  1. Collect is_final transcripts until 1.5s silence
-  2. LLM complete on accumulated text
-  3. ElevenLabs synthesize → char entries logged → audio playback
+Turn flow (Part 2 — Crosstalk):
+  1. Each is_final word from Deepgram feeds Crosstalk.on_word_final()
+  2. Crosstalk speculatively fires LLM after SPECULATIVE_THRESHOLD_MS silence
+  3. If user keeps talking, in-flight LLM task is cancelled (asyncio.Task.cancel)
+  4. When SETTLED_THRESHOLD_MS passes with no new words, response commits → TTS
 
 All char entries (user STT + bot TTS) go to JsonlStore.
 UI callbacks update StatusBar + transcript logs.
+
+Env vars:
+  CROSSTALK_SPECULATIVE_THRESHOLD_MS  (default 250)
+  CROSSTALK_SETTLED_THRESHOLD_MS      (default 600)
+  CROSSTALK_MIN_WORDS                 (default 3)
 """
 from __future__ import annotations
 
@@ -18,6 +24,7 @@ from dataclasses import dataclass
 
 
 from .char_timeline import CharEntry, JsonlStore
+from .crosstalk import Crosstalk
 from .deepgram_client import DeepgramStream
 from .llm_client import LLMClient
 from .mic_capture import MicStream
@@ -40,8 +47,6 @@ class ConversationLoop:
     All UI callbacks are called from the asyncio thread and should be
     non-blocking (schedule Textual updates via app.call_from_thread if needed).
     """
-
-    SILENCE_TIMEOUT = 1.5  # seconds after last is_final before LLM call
 
     def __init__(
         self,
@@ -76,10 +81,14 @@ class ConversationLoop:
         self._running = False
         self._stop_event = asyncio.Event()
 
-        # Turn accumulation
+        # Turn accumulation (fed to Crosstalk)
         self._pending_finals: list[str] = []
-        self._last_final_time: float = 0.0
-        self._final_event = asyncio.Event()
+
+        # Crosstalk coordinator — replaces dumb 1.5s silence wait
+        self._crosstalk = Crosstalk(
+            llm_client=self._llm,
+            on_response_ready=self._on_crosstalk_response,
+        )
 
         # Set callbacks on deepgram stream
         self._dg._on_chars = self._handle_dg_chars
@@ -93,19 +102,18 @@ class ConversationLoop:
         self._stop_event.clear()
 
         mic_task = asyncio.create_task(self._mic_pump())
-        turn_task = asyncio.create_task(self._turn_loop())
         level_task = asyncio.create_task(self._level_pump())
 
         try:
             await asyncio.wait(
-                [mic_task, turn_task, level_task],
+                [mic_task, level_task],
                 return_when=asyncio.FIRST_EXCEPTION,
             )
         finally:
             self._running = False
             mic_task.cancel()
-            turn_task.cancel()
             level_task.cancel()
+            await self._crosstalk.cancel()
             await self._dg.finish()
             await self._store.close()
 
@@ -156,95 +164,69 @@ class ConversationLoop:
         word = "".join(c.char for c in chars if c.char.strip())
         if word:
             self._pending_finals.append(word)
-            self._last_final_time = time.monotonic()
-            self._final_event.set()
             full = " ".join(self._pending_finals)
+            word_count = len(self._pending_finals)
+
             if self._on_user_final:
                 self._on_user_final(full)
             if self._on_status:
                 self._on_status("stt", "final")
 
+            # Keep crosstalk history in sync, then notify
+            self._crosstalk.set_history(self._history)
+            if self._on_status:
+                self._on_status("llm", "speculating")
+            asyncio.create_task(self._crosstalk.on_word_final(full, word_count))
+
     # ------------------------------------------------------------------
-    # Turn loop: collect silence → LLM → TTS
+    # Crosstalk response handler — called when speculation settles
 
-    async def _turn_loop(self) -> None:
-        while self._running:
-            # Wait for at least one final transcript
-            try:
-                await asyncio.wait_for(self._final_event.wait(), timeout=30.0)
-            except asyncio.TimeoutError:
-                continue
-            except asyncio.CancelledError:
-                break
+    def _on_crosstalk_response(
+        self, bot_text: str, latency: float, provider: str
+    ) -> None:
+        """Called by Crosstalk when an LLM response commits (not cancelled)."""
+        user_text = " ".join(self._pending_finals).strip()
+        self._pending_finals.clear()
 
-            self._final_event.clear()
+        asyncio.create_task(self._handle_committed_response(user_text, bot_text, latency, provider))
 
-            # Wait for silence window (1.5s after last final)
-            while True:
-                time_since_last = time.monotonic() - self._last_final_time
-                remaining = self.SILENCE_TIMEOUT - time_since_last
-                if remaining <= 0:
-                    break
-                try:
-                    await asyncio.wait_for(self._final_event.wait(), timeout=remaining)
-                    self._final_event.clear()
-                except asyncio.TimeoutError:
-                    break
+    async def _handle_committed_response(
+        self, user_text: str, bot_text: str, latency: float, provider: str
+    ) -> None:
+        if self._on_bot_response:
+            self._on_bot_response(bot_text, latency, provider)
+        if self._on_status:
+            self._on_status("stt", "idle")
+            self._on_status("llm", f"{latency:.2f}s")
+            self._on_status("tts", "synth")
 
-            if not self._pending_finals:
-                continue
-
-            user_text = " ".join(self._pending_finals).strip()
-            self._pending_finals.clear()
-
-            if not user_text:
-                continue
-
-            # LLM call
-            if self._on_status:
-                self._on_status("stt", "idle")
-                self._on_status("llm", "thinking")
-
-            try:
-                bot_text, latency, provider = await self._llm.complete(user_text, self._history)
-            except Exception as exc:
-                print(f"[orchestrator] LLM error: {exc}")
-                if self._on_status:
-                    self._on_status("llm", "error")
-                continue
-
-            if self._on_bot_response:
-                self._on_bot_response(bot_text, latency, provider)
-            if self._on_status:
-                self._on_status("llm", f"{latency:.2f}s")
-                self._on_status("tts", "synth")
-
-            # Update history
+        # Update history
+        if user_text:
             self._history.append({"role": "user", "content": user_text})
-            self._history.append({"role": "assistant", "content": bot_text})
-            # Keep history bounded
-            if len(self._history) > 20:
-                self._history = self._history[-20:]
+        self._history.append({"role": "assistant", "content": bot_text})
+        # Keep history bounded
+        if len(self._history) > 20:
+            self._history = self._history[-20:]
 
-            # TTS
-            try:
-                audio_bytes, bot_chars = await self._tts.synthesize(bot_text, self._session_start)
+        # TTS
+        try:
+            audio_bytes, bot_chars = await self._tts.synthesize(bot_text, self._session_start)
 
-                # Log bot chars first
-                for ch in bot_chars:
-                    await self._store.append(ch)
-                if self._on_chars and bot_chars:
-                    self._on_chars(bot_chars)
+            # Log bot chars first
+            for ch in bot_chars:
+                await self._store.append(ch)
+            if self._on_chars and bot_chars:
+                self._on_chars(bot_chars)
 
-                if self._on_status:
-                    self._on_status("tts", "playing")
+            if self._on_status:
+                self._on_status("tts", "playing")
 
-                await self._tts.play_audio(audio_bytes)
+            await self._tts.play_audio(audio_bytes)
 
-                if self._on_status:
-                    self._on_status("tts", "idle")
+            if self._on_status:
+                self._on_status("tts", "idle")
 
-            except Exception as exc:
-                print(f"[orchestrator] TTS error: {exc}")
-                if self._on_status:
-                    self._on_status("tts", "error")
+        except Exception as exc:
+            print(f"[orchestrator] TTS error: {exc}")
+            if self._on_status:
+                self._on_status("tts", "error")
