@@ -109,12 +109,20 @@ Speculative LLM firing + cancellation — eliminates the fixed 1.5s silence-wait
 | `CROSSTALK_SETTLED_THRESHOLD_MS` | `600` | ms silence before committing to TTS |
 | `CROSSTALK_MIN_WORDS` | `3` | minimum words to trigger speculation |
 | `BARGE_IN_PARTIAL_CHARS` | `3` | min chars in a Deepgram partial that cuts in-flight TTS |
+| `POST_TTS_COOLDOWN_S` | `0.6` | seconds after natural TTS end during which finals are still dropped (echo tail) |
 
 Fragments under 3 words (e.g. "um", "yeah") are never speculated on — avoids wasted LLM calls on filler.
 
 **Barge-in:** when the bot is mid-sentence, the first Deepgram partial that reaches `BARGE_IN_PARTIAL_CHARS` characters calls `sounddevice.stop()` and the TTS state flips to `barged`. The user's subsequent `is_final` enters the normal Crosstalk path and starts a fresh turn. Raise the threshold to suppress short noises (cough, "uh"); lower it for more aggressive barge.
 
-**Echo guard:** without an AEC step, the bot's own audio bleeds back through the mic and Deepgram transcribes it — which would make the bot barge in on itself (and even reply to itself). Before treating a partial or final as user speech during TTS, we normalize it (lowercase, strip punctuation) and compare against the bot's current outgoing text. If 60%+ of the partial's words appear in the bot text, it's classified as echo and ignored. The guard stays armed for 600ms after `sd.play()` returns to absorb the tail.
+**Echo guard / self-reply prevention:** without an AEC step, the bot's own audio bleeds through the speakers into the mic and Deepgram transcribes it. Text-only echo detection isn't enough — Deepgram occasionally hallucinates a novel word from coughs/breath/room noise, and that's all it takes for the bot to enter a Crosstalk cycle and reply to itself.
+
+The fix is a **hard time gate**: during TTS playback (and for `POST_TTS_COOLDOWN_S` afterward), `is_final` events are dropped before they can reach Crosstalk. Two ways the gate opens:
+
+1. **Barge-in.** When a partial crosses `BARGE_IN_PARTIAL_CHARS` we call `sounddevice.stop()` AND open the gate immediately — the user's intentional interruption is the most trustworthy signal that real human speech is on the wire.
+2. **Natural TTS end.** Gate stays closed for `POST_TTS_COOLDOWN_S` after `sd.play()` returns to absorb late echo, then reopens.
+
+A separate word-set echo heuristic still runs on partials during TTS so that **barge-in itself** isn't tripped by the bot's own audio — the bot can still see its own transcript flow through, it just won't be allowed to cut itself off OR talk back.
 
 Implementation: `scripts/conduit_tui/crosstalk.py` (coordinator) + `scripts/conduit_tui/orchestrator.py` (wiring).
 Reference: https://github.com/tarzain/crosstalk (commit 327b2da).

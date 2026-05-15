@@ -108,6 +108,19 @@ class ConversationLoop:
         # What the bot is currently saying — used to reject echo of bot
         # audio so we don't barge-in on ourselves.
         self._current_bot_text_norm: str = ""
+        # Hard gate: monotonic time until which incoming Deepgram finals
+        # must NOT be forwarded to Crosstalk. While the bot's audio is
+        # bleeding into the mic there's no reliable way to distinguish
+        # echo from real user speech via text alone (Deepgram occasionally
+        # hallucinates a novel word, which slips word-set echo detection
+        # and triggers the bot to reply to itself).
+        # 0.0 means "accept now". Set to `monotonic() + tts_duration` when
+        # TTS starts, advanced to `monotonic() + cooldown` after natural
+        # end, and forced to `monotonic()` (open immediately) on a barge.
+        self._finals_gate_until: float = 0.0
+        self._post_tts_cooldown_s = float(
+            os.environ.get("POST_TTS_COOLDOWN_S", "0.6")
+        )
 
         # Crosstalk coordinator — replaces dumb 1.5s silence wait
         self._crosstalk = Crosstalk(
@@ -223,6 +236,10 @@ class ConversationLoop:
         except Exception as exc:
             print(f"[orchestrator] barge-in stop error: {exc}")
         self._tts_playing = False
+        # Open the finals gate immediately — the user's intentional barge
+        # is the trustworthy signal that they're speaking, not the bot.
+        self._finals_gate_until = time.monotonic()
+        self._current_bot_text_norm = ""
         if self._on_status:
             self._on_status("tts", "barged")
 
@@ -256,12 +273,15 @@ class ConversationLoop:
         if not words_in_batch:
             return
 
-        # Echo filter: if the bot is still speaking (or just finished) and
-        # this final matches what the bot is saying, drop it. Otherwise the
-        # bot's audio bleeding into the mic kicks off a Crosstalk cycle
-        # that makes the bot reply to itself.
-        echo_candidate = " ".join(words_in_batch)
-        if self._current_bot_text_norm and self._is_bot_echo(echo_candidate):
+        # Hard time gate: while TTS is playing (and during the brief
+        # post-TTS cooldown), drop finals before they can reach Crosstalk.
+        # The bot's own audio bleeds through the mic and Deepgram cannot
+        # reliably be distinguished from user speech by text-matching
+        # alone — a single hallucinated word slips the echo heuristic and
+        # the bot ends up replying to itself. A barge-in event opens the
+        # gate immediately so the user's intentional interruption is
+        # still captured in the next final.
+        if time.monotonic() < self._finals_gate_until:
             return
 
         for w in words_in_batch:
@@ -326,14 +346,23 @@ class ConversationLoop:
 
             self._current_bot_text_norm = _normalize_for_echo(bot_text)
             self._tts_playing = True
+            # Block finals from reaching Crosstalk during playback. We
+            # use a generous upper bound (estimated by bot text length —
+            # ~13 chars per second of natural speech is a safe lower
+            # bound on duration) and we replace it precisely on the
+            # finally branch once we know playback actually ended.
+            est_duration_s = max(1.5, len(bot_text) / 12.0)
+            self._finals_gate_until = time.monotonic() + est_duration_s + 5.0
             try:
                 await self._tts.play_audio(audio_bytes)
             finally:
                 self._tts_playing = False
-                # Hold the bot-text echo guard for a brief tail so a
-                # final that lands right after sd.play() returns still
-                # gets filtered out of Crosstalk. Kept short so the next
-                # legitimate user turn isn't suppressed.
+                # Cooldown after natural TTS end — the speaker may still
+                # be sending echo for ~hundreds of ms after sd.play()
+                # returns. A barge would have already opened the gate.
+                self._finals_gate_until = (
+                    time.monotonic() + self._post_tts_cooldown_s
+                )
                 asyncio.create_task(self._clear_echo_guard_after(0.25))
 
             if self._on_status:
@@ -343,5 +372,6 @@ class ConversationLoop:
             print(f"[orchestrator] TTS error: {exc}")
             self._tts_playing = False
             self._current_bot_text_norm = ""
+            self._finals_gate_until = time.monotonic()
             if self._on_status:
                 self._on_status("tts", "error")
