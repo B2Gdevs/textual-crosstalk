@@ -2,6 +2,11 @@
 
 A Python TUI program where you speak, an LLM responds in a human voice, and every character spoken or heard is saved with millisecond-precision timestamps.
 
+## Demo videos
+
+- **Agents go off during the showcase** (two-way interruption getting chaotic in the best way) — https://www.loom.com/share/7e5b47ec7862425cacc0c174c75d04b5
+- **Wrap-up walkthrough** — https://www.loom.com/share/33ba9b07cb694564aa2c8065b33cc3eb
+
 ## What it does
 
 1. **Listen** — captures mic audio and streams to Deepgram for realtime transcription
@@ -20,9 +25,26 @@ A Python TUI program where you speak, an LLM responds in a human voice, and ever
 
 ## Setup
 
+**One-shot scripts** — create the venv, install deps, then launch:
+
+```powershell
+# Windows (PowerShell)
+.\setup.ps1
+```
+
+```bash
+# macOS / Linux
+./setup.sh
+```
+
+Both scripts assume `.env.local` already exists with the keys below. They build `.venv`, `pip install -r requirements.txt`, and run `python main.py`.
+
+**Manual setup** if you prefer step-by-step:
+
 ```bash
 python -m venv .venv
 .venv\Scripts\activate          # Windows
+# source .venv/bin/activate     # macOS / Linux
 pip install -r requirements.txt
 ```
 
@@ -36,7 +58,7 @@ Copy `.env.example` to `.env.local` and fill in:
 | `OPENROUTER_API_KEY` | Yes (or Groq) | openrouter.ai |
 | `GROQ_API_KEY` | Yes (or OpenRouter) | console.groq.com |
 | `ELEVENLABS_API_KEY` | Yes | elevenlabs.io |
-| `ELEVENLABS_VOICE_ID` | No | default: Rachel (21m00Tcm4TlvDq8ikWAM) |
+| `ELEVENLABS_VOICE_ID` | No | default: Sarah (`EXAVITQu4vr4xnSDxMaL`) — premade voice, works on the free tier. Rachel and other library voices require a paid plan. |
 | `OPENAI_API_KEY` | No | fallback LLM |
 | `CONDUIT_CHAR_LOG` | No | default: `./data/chars.jsonl` |
 | `CONDUIT_SAMPLE_RATE` | No | default: 16000 |
@@ -92,6 +114,19 @@ Fragments under 3 words (e.g. "um", "yeah") are never speculated on — avoids w
 Implementation: `scripts/conduit_tui/crosstalk.py` (coordinator) + `scripts/conduit_tui/orchestrator.py` (wiring).
 Reference: https://github.com/tarzain/crosstalk (commit 327b2da).
 
-## Share
+## Submission note
 
-Repo to be shared with GitHub user **RioPopper**.
+> Completed the challenge and it was a lot of fun. Had some fun moments
+> with the two-way interruption and how chaotic it can get.
+>
+> Fun video where the agents went off during the showcase:
+> https://www.loom.com/share/7e5b47ec7862425cacc0c174c75d04b5
+>
+> And just my wrap up:
+> https://www.loom.com/share/33ba9b07cb694564aa2c8065b33cc3eb
+>
+> Respectfully sent,
+> Benjamin Garrard
+
+Repo: https://github.com/B2Gdevs/textual-crosstalk
+Shared with GitHub user **RioPopper**.
