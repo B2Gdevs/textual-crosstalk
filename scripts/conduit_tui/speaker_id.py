@@ -195,10 +195,15 @@ def _spectral_centroid_zcr(samples: np.ndarray, sr: int = _SAMPLE_RATE) -> tuple
 
 
 def extract_features(samples_int16: np.ndarray) -> np.ndarray | None:
-    """Compute a 29-dim feature vector from an int16 audio clip.
+    """Compute a 58-dim feature vector from an int16 audio clip.
 
     Returns None if the clip is too short to be informative.
-    Output dims: 13 MFCC mean + 13 ΔMFCC mean + F0 + centroid + ZCR.
+    Output dims: per MFCC dim and per ΔMFCC dim, BOTH mean AND std
+    across the frame axis (captures within-clip variability — a
+    single-vector mean-pooling collapsed all the timing info).
+    Then F0, spectral centroid, ZCR.
+    Total: 13*2 (mfcc μ+σ) + 13*2 (dmfcc μ+σ) + 3 = 55. Padded with
+    mean-of-log-mel and std-of-log-mel summary scalars → 58.
     """
     if samples_int16.size < _SAMPLE_RATE // 4:  # <250ms
         return None
@@ -209,15 +214,37 @@ def extract_features(samples_int16: np.ndarray) -> np.ndarray | None:
         return None
     mfcc = _mfcc(frames)
     dmfcc = _delta(mfcc)
+    # Mean AND std per dim — the std captures within-clip
+    # variability that mean-pooling alone discarded.
     mfcc_mean = mfcc.mean(axis=0)
+    mfcc_std = mfcc.std(axis=0)
     dmfcc_mean = dmfcc.mean(axis=0)
+    dmfcc_std = dmfcc.std(axis=0)
     f0 = _estimate_f0(samples)
     centroid, zcr = _spectral_centroid_zcr(samples)
+    # Summary log-energy stats — speaker timbre signature
+    log_mel_mean = float(np.log(np.abs(np.fft.rfft(samples)) + 1e-10).mean())
+    log_mel_std = float(np.log(np.abs(np.fft.rfft(samples)) + 1e-10).std())
+    spectral_rolloff_85 = float(_spectral_rolloff(samples, percentile=0.85))
+
     return np.concatenate([
         mfcc_mean.astype(np.float32),
+        mfcc_std.astype(np.float32),
         dmfcc_mean.astype(np.float32),
-        np.array([f0, centroid, zcr], dtype=np.float32),
+        dmfcc_std.astype(np.float32),
+        np.array([f0, centroid, zcr, log_mel_mean, log_mel_std, spectral_rolloff_85], dtype=np.float32),
     ])
+
+
+def _spectral_rolloff(samples: np.ndarray, percentile: float = 0.85) -> float:
+    """Frequency below which `percentile` of spectral energy lies."""
+    spec = np.abs(np.fft.rfft(samples, n=_FFT_N))
+    cum = np.cumsum(spec)
+    if cum[-1] == 0:
+        return 0.0
+    idx = int(np.searchsorted(cum, percentile * cum[-1]))
+    freqs = np.fft.rfftfreq(_FFT_N, 1.0 / _SAMPLE_RATE)
+    return float(freqs[min(idx, len(freqs) - 1)])
 
 
 def _l2_normalize(v: np.ndarray) -> np.ndarray:
@@ -303,8 +330,15 @@ class SpeakerClassifier:
             return
         try:
             tpl = np.load(_USER_TEMPLATE_PATH)
-            if tpl.shape == (29,):
+            # Accept either the old 29-dim or new 58-dim format; mismatched
+            # dim means the feature backend changed — drop cache so the
+            # next session re-enrolls cleanly.
+            expected_dim = 58
+            if tpl.shape == (expected_dim,):
                 self._templates["user"] = tpl.astype(np.float32)
+            else:
+                print(f"[speaker_id] cached template dim mismatch — re-enroll needed")
+                _USER_TEMPLATE_PATH.unlink(missing_ok=True)
         except Exception as exc:
             print(f"[speaker_id] cache load failed: {exc}")
 

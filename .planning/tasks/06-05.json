@@ -1,0 +1,30 @@
+{
+  "id": "06-05",
+  "phase": "06",
+  "status": "done",
+  "goal": "Real-data benchmark revealed Tier 0 classifier fails on ElevenLabs voices. Added 58-dim feature variant (per-frame mean+std + spectral rolloff + log-mel energy stats) to extract_features; 5-way closed-set ELEVENLABS REAL accuracy improved 16% -> 24% (chance 20%). Confirmed handcrafted features cannot separate similar-quality studio TTS voices — synthetic formant-synth corpus was artificially favorable. README updated with the honest real-world floor + 'use only for dramatic user/bot voice contrast' guidance. E8 logged. Phase 07 planned for Tier 1 ONNX ECAPA-TDNN upgrade.",
+  "type": "code",
+  "keywords": "",
+  "depends": [
+    "06-01"
+  ],
+  "commands": [],
+  "files": [
+    "scripts/conduit_tui/speaker_id.py",
+    "README.md"
+  ],
+  "agent_id": "claude-opus-4-7",
+  "agent_role": "",
+  "runtime": "claude-code",
+  "model_profile": "",
+  "resolved_model": "",
+  "skill": "",
+  "claimed_by": "",
+  "claimed": false,
+  "claimed_at": "",
+  "lease_expires_at": "",
+  "completed_at": "",
+  "resolution": "",
+  "created_at": "2026-05-15T22:50:38.725Z",
+  "updated_at": "2026-05-15T22:50:39.501Z"
+}

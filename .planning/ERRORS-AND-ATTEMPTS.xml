@@ -60,4 +60,14 @@
     <reference>scripts/conduit_tui/benchmark.py</reference>
     <reference>README.md</reference>
   </entry>
+
+  <entry id="classifier-tier0-fails-on-real-elevenlabs-2026-05-15" date="2026-05-15" phase="06" status="open" kind="verification">
+    <summary>Pure-numpy 29-dim / 58-dim classifier fails to discriminate real ElevenLabs voices (24% on 5-way, chance 20%)</summary>
+    <context>After shipping the real ElevenLabs corpus (5 voices x 30 phrases = 150 clips), ran a 5-way closed-set benchmark — enrol each voice with one clip, test against 10 unseen clips per voice. First run with 29-dim features: 16% accuracy. Upgraded to 58-dim (added per-frame std, spectral rolloff, log-mel energy stats): 24%. Both barely above random.</context>
+    <failure>ElevenLabs premade voices are all studio-quality narrator-style speech with overlapping prosody, formant ranges, and pitch distributions. Handcrafted MFCC-class features pooled across a clip collapse the discriminative signal — same-voice and diff-voice pairs both score cosine similarity ~0.99. The 80% accuracy on the SYNTHETIC formant-synth corpus came from artificially extreme F0 separation (120 Hz vs 220 Hz) and exaggerated formant differences that don't exist in real-world TTS voice pools. The synthetic benchmark is non-predictive of real-world performance.</failure>
+    <rule>Handcrafted spectral features (MFCC, F0, centroid, rolloff) at the mean+std pooling level are insufficient for closed-set classification across N similar-quality TTS voices. The Tier 0 implementation is sufficient ONLY for the binary case where user voice (e.g., low male) is dramatically different from bot voice (e.g., high female Sarah). For multi-bot scenarios with multiple TTS voices, escalate immediately to Tier 1 (learned speaker embeddings via ONNX-converted ECAPA-TDNN or similar). Synthetic benchmarks must be cross-validated against real-corpus benchmarks BEFORE assuming the system works.</rule>
+    <reference>scripts/conduit_tui/speaker_id.py</reference>
+    <reference>scripts/conduit_tui/benchmark.py</reference>
+    <reference>data/dataset/manifest.json</reference>
+  </entry>
 </errors-and-attempts>

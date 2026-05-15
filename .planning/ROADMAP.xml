@@ -46,4 +46,11 @@
     <depends>04</depends>
   </phase>
 
+  <phase id="07">
+    <title>Tier 1 speaker classifier: ONNX ECAPA-TDNN learned embeddings</title>
+    <goal>Replace the Tier 0 pure-numpy 58-dim handcrafted feature vector with a learned speaker embedding from a pretrained ONNX-converted ECAPA-TDNN (SpeechBrain) or x-vector model. Same extract_features / SpeakerClassifier.classify interface so wiring is unchanged. Add onnxruntime (~30 MB) + the model file (~10-20 MB) to deps. Target: 90%+ accuracy on the existing 5-voice ElevenLabs closed-set benchmark (Tier 0 sits at 24%). Same benchmark harness re-runs and produces apples-to-apples size/accuracy delta.</goal>
+    <status>planned</status>
+    <depends>06</depends>
+  </phase>
+
 </roadmap>

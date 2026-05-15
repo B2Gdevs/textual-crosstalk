@@ -198,16 +198,18 @@ The harness reports two things:
 1. **Classifier accuracy** on a synthetic-voice corpus (formant-synth user vs formant-synth bot, 5 unseen clips each). Clean speech, plus a stress condition where each clip has the bot's voice mixed in at −10 dB to simulate AEC residual.
 2. **AEC ERLE** (echo return loss enhancement) in a pure-echo scenario, plus correlation against the user-only signal under simulated double-talk.
 
-Last measured (Tier 0 / pure-numpy + speexdsp / 2026-05-15):
+Last measured (Tier 0 / pure-numpy 58-dim + speexdsp / 2026-05-15):
 
 | Metric | Result | Notes |
 |---|---|---|
-| Classifier accuracy (clean synthetic) | **80%** | 8/10. Both errors are bot-clips classified as user. Synthetic sinusoidal voices are adversarial for MFCC — real human voice + ElevenLabs TTS have far richer spectra and should separate more cleanly. |
-| Classifier accuracy under +bot interferer | **80%** | unchanged under -10 dB additive bot interference |
-| Equal Error Rate (EER) | **20%** | single-threshold operating point on the synthetic corpus |
+| Classifier accuracy — synthetic formant-synth (5-way) | **80%** | Misleadingly optimistic. The synthetic voices have artificially extreme F0 separation (120 Hz user vs 220 Hz bot) and exaggerated formant differences. |
+| **Classifier accuracy — REAL ElevenLabs (5-way closed-set)** | **24%** | 12/50 correct, chance = 20%. ElevenLabs premade voices are all studio-quality narrators with overlapping prosody, formant ranges, and pitch — handcrafted MFCC-class features cannot separate them. **This is the real-world floor and it's not useful.** See `ERRORS-AND-ATTEMPTS.xml` → `classifier-tier0-fails-on-real-elevenlabs-2026-05-15` for the full finding. |
+| Classifier same vs diff cos sim | 0.992 vs 0.993 | Same-voice and diff-voice pairs are statistically indistinguishable in our feature space. |
 | AEC ERLE (pure echo, synthetic) | **−3.2 dB** | post-convergence on a single-tone reference. Higher (better) on real broadband speech — the standalone pyaec smoke test on richer signals hit ~11.5 dB. |
 | Classifier latency | **5.36 ms** per call (500ms clip, CPU) | invoked once per Deepgram partial (~5×/sec) — negligible |
 | AEC latency | **2.80 ms** per 1024-sample chunk (= 64ms audio) | 4.4% of real-time → ample headroom for STT/LLM/TTS network calls |
+
+**Honest read:** Tier 0 classifier works only for the **binary user-vs-bot case where the two voices are dramatically different** (e.g., adult male user vs Sarah). For multi-bot scenarios in the upcoming meeting mode, Tier 1 (ONNX learned embeddings) is mandatory — phase 07 plans it. The AEC and barge state-machine fixes stand on their own and don't depend on speaker classification working perfectly.
 
 The synthetic test is the floor, not the ceiling — handcrafted features and adaptive filters both benefit from spectral diversity that pure sinusoids don't provide. If you want a real number for your environment, pass actual recordings via `--user user.wav --bot bot.wav` (16-bit mono, any rate). Drop a 10-30 second clip of each into the harness and you'll get an honest accuracy / EER for your conditions.
 
