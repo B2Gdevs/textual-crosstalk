@@ -111,4 +111,14 @@
     </references>
   </decision>
 
+  <decision id="CONDUIT-PROJ-D-016">
+    <title>Loop prevention via hard time gate on Crosstalk finals during TTS+cooldown, not text heuristics</title>
+    <date>2026-05-15</date>
+    <summary>The text-content echo heuristic (word-set membership against the bot's outgoing text) is structurally insufficient. Deepgram is a probabilistic model and occasionally inserts a hallucinated word (cough/breath/room noise mis-transcribed) which makes the partial appear to contain novel user speech. That single novel word slipped the heuristic, the 'echo' transcript entered Crosstalk, and the bot replied to itself in a self-feedback loop. Replace the heuristic with a hard time-based gate: while TTS is playing AND for POST_TTS_COOLDOWN_S (default 0.6s) afterward, Deepgram is_final events are unconditionally dropped before reaching Crosstalk. No text-based escape hatch — if the bot is speaking, no LLM cycle can begin. Barge-in opens the gate immediately so the user's intentional cut is captured in the next final without waiting out the cooldown. The text-based echo check is retained on the partial→barge path so the bot's own audio cannot trip its own barge.</summary>
+    <impact>Eliminates the bot-replies-to-itself loop. Cost: during TTS the user's words are not submitted to the LLM until they explicitly barge (cuts TTS, opens gate) or TTS ends naturally + cooldown expires. This matches normal human conversational turn-taking and prevents the failure mode. POST_TTS_COOLDOWN_S exposed as env knob for hardware tuning.</impact>
+    <references>
+      <file path="scripts/conduit_tui/orchestrator.py"/>
+    </references>
+  </decision>
+
 </decisions>

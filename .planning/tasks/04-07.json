@@ -1,0 +1,30 @@
+{
+  "id": "04-07",
+  "phase": "04",
+  "status": "done",
+  "goal": "Stop the bot from replying to its own audio. Word-set echo guard was insufficient — Deepgram occasionally hallucinates a novel word from speaker echo + breath + room noise, which slipped the heuristic and the bot entered a Crosstalk cycle on its own voice. Replace the heuristic with a hard time gate: during TTS playback AND for POST_TTS_COOLDOWN_S (default 0.6s) afterward, is_final events are dropped before reaching Crosstalk. Barge-in opens the gate immediately so the user's intentional interruption is still captured. The word-set echo check stays on the partial→barge path so the bot doesn't cut itself off via barge.",
+  "type": "code",
+  "keywords": "",
+  "depends": [
+    "04-04"
+  ],
+  "commands": [],
+  "files": [
+    "scripts/conduit_tui/orchestrator.py",
+    "README.md"
+  ],
+  "agent_id": "claude-opus-4-7",
+  "agent_role": "",
+  "runtime": "claude-code",
+  "model_profile": "",
+  "resolved_model": "",
+  "skill": "",
+  "claimed_by": "",
+  "claimed": false,
+  "claimed_at": "",
+  "lease_expires_at": "",
+  "completed_at": "",
+  "resolution": "",
+  "created_at": "2026-05-15T20:14:23.917Z",
+  "updated_at": "2026-05-15T20:14:24.455Z"
+}
