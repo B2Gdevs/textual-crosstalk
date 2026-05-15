@@ -1,0 +1,31 @@
+{
+  "id": "CONDUIT-PROJ-T-02-01",
+  "phase": "02",
+  "status": "done",
+  "goal": "Implement crosstalk per CONDUIT-PROJ-D-012. Add scripts/conduit_tui/crosstalk.py: SilenceWindow + SpeculativeLLM coordinator. Modify orchestrator.py to replace dumb silence-wait loop with crosstalk-coordinated turn detection.",
+  "type": "",
+  "keywords": "",
+  "depends": [],
+  "commands": [],
+  "files": [
+    "scripts/conduit_tui/crosstalk.py",
+    "scripts/conduit_tui/orchestrator.py",
+    ".env.example",
+    ".env.local",
+    "README.md"
+  ],
+  "agent_id": "claude-sonnet-4-6",
+  "agent_role": "",
+  "runtime": "claude-code",
+  "model_profile": "",
+  "resolved_model": "",
+  "skill": "",
+  "claimed_by": "",
+  "claimed": false,
+  "claimed_at": "",
+  "lease_expires_at": "",
+  "completed_at": "",
+  "resolution": "",
+  "created_at": "2026-05-15T18:23:09.458Z",
+  "updated_at": "2026-05-15T18:23:42.581Z"
+}

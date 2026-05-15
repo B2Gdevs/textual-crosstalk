@@ -43,3 +43,11 @@ Thumbs.db
 *.mp3
 *.opus
 *.webm
+
+# Planning transients (per-machine, auto-regenerated)
+.planning/.gad-log/
+.planning/.trace-events.jsonl
+.planning/.trace-seq
+.planning/sessions/
+.planning/graph.json
+.planning/graph.html

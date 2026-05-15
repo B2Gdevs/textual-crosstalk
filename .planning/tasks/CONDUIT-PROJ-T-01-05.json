@@ -1,7 +1,7 @@
 {
   "id": "CONDUIT-PROJ-T-01-05",
   "phase": "01",
-  "status": "planned",
+  "status": "done",
   "goal": "Unified char data store: CharEntry dataclass (char, start_time, end_time, notes), append-only in-memory list, flush_to_jsonl() that appends new entries to conversation.jsonl on each turn",
   "type": "code",
   "keywords": "",
@@ -9,11 +9,12 @@
   "commands": [],
   "files": [
     "conduit/store.py",
-    "conversation.jsonl"
+    "conversation.jsonl",
+    "scripts/conduit_tui/tts_client.py"
   ],
-  "agent_id": "",
+  "agent_id": "claude-sonnet-4-6",
   "agent_role": "",
-  "runtime": "",
+  "runtime": "claude-code",
   "model_profile": "",
   "resolved_model": "",
   "skill": "",
@@ -24,5 +25,5 @@
   "completed_at": "",
   "resolution": "",
   "created_at": "2026-05-15T17:42:32.657Z",
-  "updated_at": "2026-05-15T17:42:32.657Z"
+  "updated_at": "2026-05-15T18:12:44.379Z"
 }

@@ -73,4 +73,9 @@
     <summary>Switch LLM provider from Groq → OpenRouter (operator direction 2026-05-15). OpenRouter is OpenAI-compatible, routes to any provider (Groq/Anthropic/OpenAI/etc.) via 'provider/model' strings. Default model: meta-llama/llama-3.3-70b-instruct (balanced quality + speed). Client: openai Python SDK with base_url='https://openrouter.ai/api/v1' and OPENROUTER_API_KEY in Authorization. Per memory feedback_no_ai_sdk_use_openai_compatible.md NEVER use ai/@ai-sdk/* packages. Fallback chain: OpenRouter → OpenAI direct (key already copied from monorepo) → Groq (if key set). Supersedes CONDUIT-PROJ-D-003 which picked Groq as primary.</summary>
   </decision>
 
+  <decision id="CONDUIT-PROJ-D-012">
+    <title>Crosstalk impl approach based on tarzain/crosstalk (commi...</title>
+    <summary>Crosstalk impl approach based on tarzain/crosstalk (commit 327b2da). Silence-window algorithm: speculative LLM at 250ms post-last-is_final word, settle+commit at 600ms. Cancellation via asyncio.Task.cancel() — clean, no buffered audio loss. MIN_WORDS=3 guard prevents fragment speculation. No new VAD library — Deepgram is_final events are sufficient VAD signal. Thresholds are env-configurable via CROSSTALK_SPECULATIVE_THRESHOLD_MS / CROSSTALK_SETTLED_THRESHOLD_MS / CROSSTALK_MIN_WORDS.</summary>
+  </decision>
+
 </decisions>

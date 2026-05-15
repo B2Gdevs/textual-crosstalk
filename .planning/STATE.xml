@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<state project="conduit-proj" schema="1">
-  <level value="1" xp="0" xp_to_next="100" loaded_skills="0"/>
+<state project="conduit-proj" schema="1">  <level value="1" xp="0.5" xp_to_next="100" loaded_skills="0"/>
+  <stamped-tasks>
+    CONDUIT-PROJ-T-01-01
+  </stamped-tasks>
   <status>active</status>
   <milestone>v1</milestone>
   <current-phase></current-phase>
   <last-activity>2026-05-15</last-activity>
   <next-action>Phase 00 — install deps + verify API keys. Run: pip install deepgram-sdk groq elevenlabs sounddevice python-dotenv. Write .env with DEEPGRAM_API_KEY=07101d289c209b4af367aef6c517e640c5493079 + GROQ_API_KEY + ELEVENLABS_API_KEY. Smoke-test each API with a 3-line script. Then CONDUIT-PROJ-T-01-01 (project skeleton).</next-action>
   <state-log>
+    <entry agent="unknown" at="2026-05-15T18:23:43.183Z">Part 2 (crosstalk) implementation complete. Speculative threshold 250ms, settled 600ms. Manual smoke pending.</entry>
+    <entry agent="unknown" at="2026-05-15T18:12:50.856Z">Part 1 implementation complete — TUI conversation loop wires Deepgram STT + OpenRouter/Groq LLM + ElevenLabs TTS with unified JSONL char store. Manual smoke test pending operator env var paste.</entry>
     <entry agent="legacy-setter" at="2026-05-15T17:45:47.660Z">Phase 00 — install deps + verify API keys. From conduit_proj/ run: pip install deepgram-sdk groq elevenlabs sounddevice python-dotenv numpy. Write .env: DEEPGRAM_API_KEY=07101d289c209b4af367aef6c517e640c5493079 + GROQ_API_KEY + ELEVENLABS_API_KEY. Smoke each: 3-line test per API. Then start CONDUIT-PROJ-T-01-01. Use 'gad snapshot --projectid conduit_proj' (underscore registered, hyphen used in entity IDs only). Test brief in .planning/PROJECT.md.</entry>
     <entry agent="claude-code" at="2026-05-15T17:43:47.140Z">Test started 2026-05-15 ~12:35 local. 2.5h timer. Part 1 mandatory, Part 2 stretch. Share with GitHub user RioPopper. 00 credit cap. Stack: Python + Deepgram + Groq + ElevenLabs.</entry>
   </state-log>

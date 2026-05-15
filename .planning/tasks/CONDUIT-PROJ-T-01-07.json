@@ -1,7 +1,7 @@
 {
   "id": "CONDUIT-PROJ-T-01-07",
   "phase": "01",
-  "status": "planned",
+  "status": "done",
   "goal": "Textual TUI scaffold. Create scripts/conduit_tui/: app.py (root, screens dict), conversation_screen.py (You-said + LLM-said + char-timeline DataTable + status bar), mic_capture.py (sounddevice InputStream → Deepgram WS queue), deepgram_client.py (WS streaming, interim_results+punctuate, word-level → char interpolator), char_timeline.py (append-only JSONL char/start/end/notes dataclass), groq_client.py, elevenlabs_client.py (with_timestamps endpoint for native char-level timing), orchestrator.py (conversation loop). Pattern-match from slm_learning/scripts/learning_tui/.",
   "type": "",
   "keywords": "",
@@ -17,11 +17,12 @@
     "scripts/conduit_tui/elevenlabs_client.py",
     "scripts/conduit_tui/orchestrator.py",
     "requirements.txt",
-    "main.py"
+    "main.py",
+    "scripts/conduit_tui/status.py"
   ],
-  "agent_id": "",
+  "agent_id": "claude-sonnet-4-6",
   "agent_role": "",
-  "runtime": "",
+  "runtime": "claude-code",
   "model_profile": "",
   "resolved_model": "",
   "skill": "",
@@ -32,5 +33,5 @@
   "completed_at": "",
   "resolution": "",
   "created_at": "2026-05-15T17:56:15.253Z",
-  "updated_at": "2026-05-15T17:56:15.253Z"
+  "updated_at": "2026-05-15T18:12:45.509Z"
 }

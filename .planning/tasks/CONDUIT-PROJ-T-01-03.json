@@ -1,18 +1,20 @@
 {
   "id": "CONDUIT-PROJ-T-01-03",
   "phase": "01",
-  "status": "planned",
+  "status": "done",
   "goal": "Groq LLM client wrapper: async function send_to_llm(text) -> str using groq SDK, model llama-3.1-8b-instant, system prompt for conversational voice assistant, configurable via env",
   "type": "code",
   "keywords": "",
   "depends": [],
   "commands": [],
   "files": [
-    "conduit/llm.py"
+    "conduit/llm.py",
+    "scripts/conduit_tui/deepgram_client.py",
+    "scripts/conduit_tui/mic_capture.py"
   ],
-  "agent_id": "",
+  "agent_id": "claude-sonnet-4-6",
   "agent_role": "",
-  "runtime": "",
+  "runtime": "claude-code",
   "model_profile": "",
   "resolved_model": "",
   "skill": "",
@@ -23,5 +25,5 @@
   "completed_at": "",
   "resolution": "",
   "created_at": "2026-05-15T17:42:24.233Z",
-  "updated_at": "2026-05-15T17:42:24.233Z"
+  "updated_at": "2026-05-15T18:12:34.241Z"
 }

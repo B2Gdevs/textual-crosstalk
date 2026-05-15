@@ -1,7 +1,7 @@
 {
   "id": "CONDUIT-PROJ-T-01-01",
   "phase": "01",
-  "status": "planned",
+  "status": "done",
   "goal": "Project skeleton: pyproject.toml or requirements.txt with all deps pinned, .env.example with all 3 API key slots, .gitignore, main.py entry point stub with argparse",
   "type": "code",
   "keywords": "",
@@ -12,11 +12,13 @@
     ".env.example",
     ".gitignore",
     "main.py",
-    "pyproject.toml"
+    "pyproject.toml",
+    "scripts/conduit_tui/__init__.py",
+    "scripts/conduit_tui/app.py"
   ],
-  "agent_id": "",
+  "agent_id": "claude-sonnet-4-6",
   "agent_role": "",
-  "runtime": "",
+  "runtime": "claude-code",
   "model_profile": "",
   "resolved_model": "",
   "skill": "",
@@ -27,5 +29,5 @@
   "completed_at": "",
   "resolution": "",
   "created_at": "2026-05-15T17:42:18.872Z",
-  "updated_at": "2026-05-15T17:42:18.872Z"
+  "updated_at": "2026-05-15T18:12:27.894Z"
 }
