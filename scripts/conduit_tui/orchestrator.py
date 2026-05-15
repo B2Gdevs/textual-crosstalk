@@ -115,13 +115,26 @@ class ConversationLoop:
         self._aec = make_echo_canceller(mic_rate=sample_rate)
         self._sample_rate = int(sample_rate)
 
-        # Pure-numpy speaker classifier (MFCC + delta + F0 + centroid
-        # + ZCR → 29-dim, cosine similarity). Used as a tiebreaker for
-        # barge-in: if Deepgram emits a partial during TTS but the
-        # underlying audio classifies as the bot voice (residual echo
-        # the AEC didn't fully suppress), the barge is dropped. See
-        # scripts/conduit_tui/speaker_id.py.
-        self._spk = SpeakerClassifier(sample_rate=sample_rate)
+        # Speaker classifier — used as a tiebreaker for barge-in: if
+        # Deepgram emits a partial during TTS but the underlying audio
+        # classifies as the bot voice, barge is dropped. Two backends:
+        #   CONDUIT_SPEAKER_TIER=onnx  → Tier 1 ECAPA-TDNN ONNX (100%
+        #                                on 5-way ElevenLabs benchmark,
+        #                                ~60 ms per inference, ~70 MB
+        #                                install delta). Default.
+        #   CONDUIT_SPEAKER_TIER=numpy → Tier 0 pure-numpy MFCC+F0
+        #                                (24% on same benchmark — kept
+        #                                as a no-deps fallback).
+        speaker_tier = os.environ.get("CONDUIT_SPEAKER_TIER", "onnx").lower()
+        try:
+            if speaker_tier == "onnx":
+                from .speaker_id_onnx import OnnxSpeakerClassifier
+                self._spk = OnnxSpeakerClassifier(sample_rate=sample_rate, verbose=False)
+            else:
+                self._spk = SpeakerClassifier(sample_rate=sample_rate)
+        except Exception as exc:
+            print(f"[orchestrator] Tier 1 ONNX init failed: {exc}; falling back to Tier 0")
+            self._spk = SpeakerClassifier(sample_rate=sample_rate)
         # Persist raw operator audio per session for re-extraction on
         # future feature-tier upgrades. See operator_capture.py.
         self._capture = OperatorCapture(sample_rate=sample_rate)

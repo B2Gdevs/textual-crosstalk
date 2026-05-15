@@ -48,19 +48,23 @@ This repo was submitted in a working v1 state at commit [`49086d9`](https://gith
 | 12 | N-speaker classifier + VoxCeleb-O open-set mode + latency profile | [`c3a1b43`](https://github.com/B2Gdevs/textual-crosstalk/commit/c3a1b43) | task `04-13` · decision `D-021` |
 | 13 | Real ElevenLabs dataset (5 voices × 30 phrases) + scenario rotation + operator capture + first project skill | [`d0e86d1`](https://github.com/B2Gdevs/textual-crosstalk/commit/d0e86d1) | tasks `06-01..06-04` · decision `D-022` |
 | 14 | Real-data benchmark reveals Tier 0 ceiling (24% on real voices); Tier 1 ONNX planned | [`e9f5be8`](https://github.com/B2Gdevs/textual-crosstalk/commit/e9f5be8) | task `06-05` · error `classifier-tier0-fails-on-real-elevenlabs-2026-05-15` |
-| 15 | Vosk local STT (env-switch `CONDUIT_STT=vosk`) + WER benchmark + personalized eval | this commit | tasks `06-06, 08-01` |
+| 15 | Vosk local STT (env-switch `CONDUIT_STT=vosk`) + WER benchmark + personalized eval | [`2794adc`](https://github.com/B2Gdevs/textual-crosstalk/commit/2794adc) | tasks `06-06, 08-01` · decision `D-023` |
+| 16 | **Tier 1 ONNX speaker classifier — 24% → 100% on 5-way ElevenLabs** | this commit | task `07-01` · decision `D-024` |
 
-### Measured benchmark snapshots (against `e9f5be8`)
+### Measured benchmark snapshots
 
-| Metric | Synthetic floor | Real ElevenLabs |
+| Metric | Tier 0 (numpy MFCC) | Tier 1 (ONNX ECAPA-TDNN) |
 |---|---|---|
-| Speaker classifier 5-way closed-set accuracy | 80% | **24%** (chance 20%) |
-| Same-voice vs diff-voice cosine sim | 0.998 / 0.998 (synth) | 0.992 / 0.993 (real) |
-| AEC ERLE (pure echo) | ~−3 dB (single tone) / ~11.5 dB (broadband) | not measured on real loop yet |
-| Speaker classifier latency | 5.4 ms | same |
+| Speaker classifier 5-way closed-set accuracy on real ElevenLabs | **24%** (chance 20%) | **100%** (50/50) |
+| Same-voice vs diff-voice cosine sim (real) | 0.992 / 0.993 (no separation) | 0.662 / 0.176 (+0.486 margin) |
+| Speaker classifier latency per inference | 5.4 ms | ~60 ms |
+| Install footprint | 0 MB extra | ~70 MB (onnxruntime + 25 MB model) |
+| AEC ERLE (pure echo) | ~−3 dB (single tone) / ~11.5 dB (broadband) | same |
 | AEC latency per 64ms chunk | 2.8 ms | same |
 
-The 24%-on-real-voices number is **the** finding of post-submission work. It's why phase 07 (Tier 1 ONNX learned embeddings) was planned — same harness, expected 90%+. See [`ERRORS-AND-ATTEMPTS.xml`](.planning/ERRORS-AND-ATTEMPTS.xml) `classifier-tier0-fails-on-real-elevenlabs-2026-05-15` for the full finding.
+**The Tier 1 jump is the most important result of post-submission work.** Tier 0 hit a feature-space ceiling — its 80% on synthetic was misleading. Tier 1 (Wespeaker's `voxceleb_ECAPA512_LM.onnx`, 24.86 MB, no torch dependency) lifted 5-way real-voice accuracy from 24% → 100% on the same corpus, the same harness, the same 50 test trials. The 0.486 cosine-similarity margin between same-voice and different-voice pairs (vs ~0.001 for Tier 0) is the actual signal that lets the system distinguish speakers.
+
+Switch backends via `CONDUIT_SPEAKER_TIER=onnx|numpy` (default `onnx` once installed). The numpy backend stays available as a no-extra-deps fallback. See `.planning/ERRORS-AND-ATTEMPTS.xml` → `classifier-tier0-fails-on-real-elevenlabs-2026-05-15` for the failure mode that Tier 1 closed.
 
 ### Planning artifacts in this repo
 

@@ -208,4 +208,17 @@
     </references>
   </decision>
 
+  <decision id="CONDUIT-PROJ-D-024">
+    <title>Tier 1 ONNX speaker classifier lifts real-voice accuracy 24% to 100%; orchestrator defaults to onnx with numpy fallback</title>
+    <date>2026-05-15</date>
+    <summary>Wespeaker voxceleb_ECAPA512_LM.onnx (24.86 MB, ECAPA-TDNN-512 with large-margin AAM-softmax, trained on VoxCeleb2 dev / 5994 speakers) loaded via onnxruntime CPU EP. Audio frontend reimplemented in pure numpy to match Kaldi-compatible 80-bin log-mel fbank (DC removal + pre-emphasis 0.97 + 25/10 ms Hamming + 512 FFT + Kaldi mel formula 1127*ln(1+f/700) + per-utterance CMN). Output: 192-dim L2-normalized embedding. Same OnnxSpeakerClassifier API surface as the existing SpeakerClassifier (enrol / classify / score_all etc.) so the orchestrator wiring stays unchanged. Total install delta ~70 MB (43 MB onnxruntime + 25 MB model + ~3 MB transitive). Per-inference latency ~60 ms p50 on CPU. Benchmark on the real 5-voice ElevenLabs corpus (data/dataset): 50/50 = 100% top-1 accuracy, same-voice cosine 0.66 vs diff-voice 0.18 (separation +0.486 vs Tier 0's ~0.001). Orchestrator chooses backend via CONDUIT_SPEAKER_TIER env (default onnx; numpy as fallback for environments without onnxruntime). User template cache split by backend (~/.conduit/voiceprint_user_onnx.npy vs voiceprint_user.npy) so the two coexist.</summary>
+    <impact>Closes E8 (classifier-tier0-fails-on-real-elevenlabs). Unblocks phase 05 multi-speaker meeting — the classifier now actually discriminates between similar-quality studio TTS voices, which is the prerequisite for soft turn-taking between two bots. Same benchmark harness, same corpus, apples-to-apples 76 percentage-point improvement. Tier 0 stays in the codebase as a 0-MB-deps fallback, not deprecated.</impact>
+    <references>
+      <file path="scripts/conduit_tui/speaker_id_onnx.py"/>
+      <file path="scripts/conduit_tui/_bench_onnx_tier1.py"/>
+      <file path="scripts/conduit_tui/orchestrator.py"/>
+      <file path="requirements.txt"/>
+    </references>
+  </decision>
+
 </decisions>
