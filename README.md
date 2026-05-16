@@ -2,6 +2,8 @@
 
 A Python TUI program where you speak, an LLM responds in a human voice, and every character spoken or heard is saved with millisecond-precision timestamps.
 
+> **Note for reviewers** — this project was submitted on **2026-05-15 around 14:27 CST** at commit [`49086d9`](https://github.com/B2Gdevs/textual-crosstalk/commit/49086d9). Everything past that commit is post-submission iteration. The [Submission state vs current state](#submission-state-vs-current-state) section below partitions the two clearly and ties every change to its commit SHA and planning artifact (task / decision / error ID) so you can navigate without ambiguity. The [Known gaps and limitations](#known-gaps-and-limitations) section lists what's honestly not done yet.
+
 ## Demo videos
 
 **Originally submitted (around the [`49086d9`](https://github.com/B2Gdevs/textual-crosstalk/commit/49086d9) commit, 2026-05-15 14:27 CST):**
@@ -84,11 +86,28 @@ Switch via `CONDUIT_STT=deepgram|vosk` (default `deepgram` for compatibility —
 
 Every change above is recorded in machine-readable form under `.planning/`:
 
-- [`.planning/ROADMAP.xml`](.planning/ROADMAP.xml) — phases 00-08 (00 setup, 01-03 original submission, 04 robustness pass, 05 multi-speaker meeting planned, 06 test infrastructure, 07 Tier 1 ONNX planned, 08 Vosk STT)
-- [`.planning/DECISIONS.xml`](.planning/DECISIONS.xml) — 22 architecture decisions, each with rationale + references
+- [`.planning/ROADMAP.xml`](.planning/ROADMAP.xml) — phases 00-08 (00 setup, 01-03 original submission, 04 robustness pass, 05 multi-speaker meeting **planned**, 06 test infrastructure, 07 Tier 1 ONNX, 08 Vosk STT)
+- [`.planning/DECISIONS.xml`](.planning/DECISIONS.xml) — 25 architecture decisions, each with rationale + references
 - [`.planning/ERRORS-AND-ATTEMPTS.xml`](.planning/ERRORS-AND-ATTEMPTS.xml) — 8 named failure modes with the rule each one teaches the next agent
 - [`.planning/tasks/*.json`](.planning/tasks/) — per-task records with attribution, status, file scope
 - [`.claude/skills/`](.claude/skills/) — first project-specific skill (`aec-before-text-echo-guards`) captured for future agents
+
+## Known gaps and limitations
+
+Honest list of what's **not** done yet so a reviewer can calibrate:
+
+| Gap | Why it matters | Status |
+|---|---|---|
+| **Multi-speaker meeting (2 bots + 1 human)** | The user explicitly asked for this; the speaker classifier and scenario rotation are in place, but the actual orchestrator for two-bot polite turn-taking is not yet built. | Phase 05 in [ROADMAP.xml](.planning/ROADMAP.xml), **planned**, not started |
+| **Tier 1 ONNX generalization to unseen voices** | The 100% number is on the 5 ElevenLabs voices we generated. Unseen voices (different ElevenLabs model, real human voices) haven't been benchmarked yet. | Same harness re-runs against any new clips; just need the audio |
+| **Vosk time-to-final** | Vosk has no equivalent of Deepgram's `utterance_end_ms=1500`; turn-finalization on the Vosk path relies entirely on `Crosstalk.SETTLED_THRESHOLD_MS`. Latency-to-final is ~1.8s slower (4138 ms vs 2352 ms) on Vosk. | Workable but Deepgram stays default; Vosk-specific tuning is a follow-up |
+| **AEC ERLE on real loop** | Benchmarked only on synthetic single-tone (−3 dB) and broadband (11.5 dB) signals. Not yet measured on a real speaker→air→mic loop in a real room. | Needs operator session recording + analysis pass |
+| **No real-mic integration test for the Vosk path** | Smoke-tested only with wav file replay. First real-mic run with `CONDUIT_STT=vosk` will be the first end-to-end validation. | Manual operator test required |
+| **No local TTS** | ElevenLabs is still required for synthesis. A local TTS (Piper, Coqui) would close the "fully offline" gap. | Out of scope for current iteration |
+| **No CI / automated regression** | The benchmark harness is operator-run. No CI gating on accuracy/latency regressions. | Out of scope; the harness is the test, not a substitute for one |
+| **Voiceprint cache is per-machine** | `~/.conduit/voiceprint_user_onnx.npy` is local — operator re-enrollment needed on a fresh machine. By design (privacy), but worth noting. | By design |
+| **Voice dataset gitignored** | `data/dataset/` (the 150-clip ElevenLabs corpus + operator session wavs) is excluded from the repo as a billable / personal artifact. A fresh clone has to run `python -m scripts.conduit_tui.dataset_gen` to repopulate before running benchmarks. | By design; bootstrap is idempotent |
+| **Speaker classifier latency 60 ms** | Within the local-pipeline budget but ~12x the Tier 0 inference cost. Quantized int8 distilled model (Tier 2 in the roadmap) would close this. | Tier 2 not yet planned in detail |
 
 ## What it does
 
