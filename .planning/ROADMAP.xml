@@ -49,14 +49,14 @@
   <phase id="07">
     <title>Tier 1 speaker classifier: ONNX ECAPA-TDNN learned embeddings</title>
     <goal>Replace the Tier 0 pure-numpy 58-dim handcrafted feature vector with a learned speaker embedding from a pretrained ONNX-converted ECAPA-TDNN (SpeechBrain) or x-vector model. Same extract_features / SpeakerClassifier.classify interface so wiring is unchanged. Add onnxruntime (~30 MB) + the model file (~10-20 MB) to deps. Target: 90%+ accuracy on the existing 5-voice ElevenLabs closed-set benchmark (Tier 0 sits at 24%). Same benchmark harness re-runs and produces apples-to-apples size/accuracy delta.</goal>
-    <status>planned</status>
+    <status>done</status>
     <depends>06</depends>
   </phase>
 
   <phase id="08">
     <title>Local STT: Vosk streaming replaces Deepgram (env-switchable)</title>
     <goal>Add Vosk-based local STT as a drop-in alternative to Deepgram. Same partial / is_final callback contract. CONDUIT_STT=vosk|deepgram env switch (default deepgram for compatibility). Vosk small-english model (~50 MB) downloaded on first run, cached at ~/.conduit/models/vosk-small-en/. Expected partial latency 50-100ms (likely BETTER than Deepgram), zero ongoing API cost. Benchmark adds WER + latency-to-first-partial comparison so the STT swap is measured, not assumed.</goal>
-    <status>planned</status>
+    <status>done</status>
     <depends>07</depends>
   </phase>
 

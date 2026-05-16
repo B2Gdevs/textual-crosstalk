@@ -9,6 +9,7 @@
   <last-activity>2026-05-15</last-activity>
   <next-action>Phase 00 — install deps + verify API keys. Run: pip install deepgram-sdk groq elevenlabs sounddevice python-dotenv. Write .env with DEEPGRAM_API_KEY=07101d289c209b4af367aef6c517e640c5493079 + GROQ_API_KEY + ELEVENLABS_API_KEY. Smoke-test each API with a 3-line script. Then CONDUIT-PROJ-T-01-01 (project skeleton).</next-action>
   <state-log>
+    <entry agent="unknown" at="2026-05-16T15:22:54.654Z">Captured README 'Known gaps' section as live GAD artifacts: 4 todos (tier1-generalization-test, vosk-time-to-final-tuning, aec-real-loop-erle-measurement, vosk-real-mic-integration-test) and 4 notes (local-tts-exploration, ci-regression-harness, tier2-distilled-classifier-deferred, by-design-tradeoffs). README gap table now links each row to its tracked artifact.</entry>
     <entry agent="unknown" at="2026-05-16T00:18:31.296Z">README finalized for reviewer clarity: top-of-page 'Note for reviewers' callout pinning submission commit 49086d9 + 2026-05-15 14:27 CST, new 'Known gaps and limitations' section listing 10 honest items (phase 05 meeting not started, Tier 1 generalization untested, Vosk time-to-final lag, AEC real-loop ERLE unmeasured, no local TTS, no CI, etc.).</entry>
     <entry agent="unknown" at="2026-05-16T00:00:36.126Z" tags="phases,sweep,close">Closed phase 08 via gad phases sweep --auto-close - 1 done, 0 cancelled.</entry>
     <entry agent="unknown" at="2026-05-16T00:00:36.121Z" tags="phases,sweep,close">Closed phase 07 via gad phases sweep --auto-close - 1 done, 0 cancelled.</entry>

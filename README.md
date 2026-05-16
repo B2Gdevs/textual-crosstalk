@@ -94,20 +94,20 @@ Every change above is recorded in machine-readable form under `.planning/`:
 
 ## Known gaps and limitations
 
-Honest list of what's **not** done yet so a reviewer can calibrate:
+Honest list of what's **not** done yet so a reviewer can calibrate. Each row links to the live GAD planning artifact (todo / note / phase) where the gap is tracked — `gad todos list --projectid conduit_proj` and `gad note list` are the CLI equivalents.
 
-| Gap | Why it matters | Status |
+| Gap | Tracked as | Status |
 |---|---|---|
-| **Multi-speaker meeting (2 bots + 1 human)** | The user explicitly asked for this; the speaker classifier and scenario rotation are in place, but the actual orchestrator for two-bot polite turn-taking is not yet built. | Phase 05 in [ROADMAP.xml](.planning/ROADMAP.xml), **planned**, not started |
-| **Tier 1 ONNX generalization to unseen voices** | The 100% number is on the 5 ElevenLabs voices we generated. Unseen voices (different ElevenLabs model, real human voices) haven't been benchmarked yet. | Same harness re-runs against any new clips; just need the audio |
-| **Vosk time-to-final** | Vosk has no equivalent of Deepgram's `utterance_end_ms=1500`; turn-finalization on the Vosk path relies entirely on `Crosstalk.SETTLED_THRESHOLD_MS`. Latency-to-final is ~1.8s slower (4138 ms vs 2352 ms) on Vosk. | Workable but Deepgram stays default; Vosk-specific tuning is a follow-up |
-| **AEC ERLE on real loop** | Benchmarked only on synthetic single-tone (−3 dB) and broadband (11.5 dB) signals. Not yet measured on a real speaker→air→mic loop in a real room. | Needs operator session recording + analysis pass |
-| **No real-mic integration test for the Vosk path** | Smoke-tested only with wav file replay. First real-mic run with `CONDUIT_STT=vosk` will be the first end-to-end validation. | Manual operator test required |
-| **No local TTS** | ElevenLabs is still required for synthesis. A local TTS (Piper, Coqui) would close the "fully offline" gap. | Out of scope for current iteration |
-| **No CI / automated regression** | The benchmark harness is operator-run. No CI gating on accuracy/latency regressions. | Out of scope; the harness is the test, not a substitute for one |
-| **Voiceprint cache is per-machine** | `~/.conduit/voiceprint_user_onnx.npy` is local — operator re-enrollment needed on a fresh machine. By design (privacy), but worth noting. | By design |
-| **Voice dataset gitignored** | `data/dataset/` (the 150-clip ElevenLabs corpus + operator session wavs) is excluded from the repo as a billable / personal artifact. A fresh clone has to run `python -m scripts.conduit_tui.dataset_gen` to repopulate before running benchmarks. | By design; bootstrap is idempotent |
-| **Speaker classifier latency 60 ms** | Within the local-pipeline budget but ~12x the Tier 0 inference cost. Quantized int8 distilled model (Tier 2 in the roadmap) would close this. | Tier 2 not yet planned in detail |
+| **Multi-speaker meeting (2 bots + 1 human)** | Phase 05 in [`ROADMAP.xml`](.planning/ROADMAP.xml) | planned, not started |
+| **Tier 1 ONNX generalization to unseen voices** | [`tier1-generalization-test`](.planning/todos/2026-05-16-tier1-generalization-test.md) | agent todo |
+| **Vosk time-to-final lag (4138 ms vs Deepgram 2352 ms)** | [`vosk-time-to-final-tuning`](.planning/todos/2026-05-16-vosk-time-to-final-tuning.md) | agent todo |
+| **AEC ERLE not measured on real speaker→mic loop** | [`aec-real-loop-erle-measurement`](.planning/todos/2026-05-16-aec-real-loop-erle-measurement.md) | agent todo |
+| **No real-mic integration test for the Vosk path** | [`vosk-real-mic-integration-test`](.planning/todos/2026-05-16-vosk-real-mic-integration-test.md) | operator todo |
+| **No local TTS — ElevenLabs still required** | [`local-tts-exploration`](.planning/notes/2026-05-16-local-tts-exploration.md) (Piper candidate) | note, deferred |
+| **No CI / automated regression gating** | [`ci-regression-harness`](.planning/notes/2026-05-16-ci-regression-harness.md) | note, deferred |
+| **Speaker classifier latency 60 ms** | [`tier2-distilled-classifier-deferred`](.planning/notes/2026-05-16-tier2-distilled-classifier-deferred.md) | note, Tier 1 already at 100% so deferred |
+| **Voiceprint cache per-machine** | [`by-design-tradeoffs`](.planning/notes/2026-05-16-by-design-tradeoffs.md) | by design (privacy) |
+| **Voice dataset gitignored** | [`by-design-tradeoffs`](.planning/notes/2026-05-16-by-design-tradeoffs.md) | by design (billable artifact) |
 
 ## What it does
 
